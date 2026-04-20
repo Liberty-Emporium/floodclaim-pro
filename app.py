@@ -351,9 +351,13 @@ def claim_detail(claim_id):
         'SELECT * FROM photos WHERE claim_id=? AND room_id IS NULL ORDER BY id',
         (claim_id,)).fetchall()
     recalc_claim(claim_id)
+    # Re-fetch after recalc so totals are fresh
     claim = db.execute('''SELECT c.*, u.name as adjuster_name
         FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''',
         (claim_id,)).fetchone()
+    if not claim:
+        flash('Claim not found.', 'error')
+        return redirect(url_for('dashboard'))
     return render_template('claim_detail.html', claim=claim,
                            room_data=room_data, unassigned_photos=unassigned_photos)
 
@@ -370,7 +374,11 @@ def update_status(claim_id):
 @app.route('/claims/<int:claim_id>/room/add', methods=['POST'])
 @login_required
 def add_room(claim_id):
-    db   = get_db()
+    db    = get_db()
+    claim = db.execute('SELECT id FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim:
+        flash('Claim not found.', 'error')
+        return redirect(url_for('dashboard'))
     name = request.form.get('room_name', '').strip()
     if name:
         db.execute('INSERT INTO rooms (claim_id, name) VALUES (?,?)', (claim_id, name))
