@@ -70,23 +70,50 @@
 </div>
 
 <!-- Info cards -->
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1.5rem">
   <div class="card" style="margin:0;padding:1rem">
     <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.06em;margin-bottom:.5rem">Flood Date</div>
     <div style="font-weight:700">{{ claim.flood_date }}</div>
+    {% if claim.water_category %}<div style="font-size:.75rem;color:#64748b;margin-top:3px">
+      Cat {{ claim.water_category }} / Class {{ claim.water_class or '?' }}
+    </div>{% endif %}
+  </div>
+  <div class="card" style="margin:0;padding:1rem">
+    <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.06em;margin-bottom:.5rem">Property</div>
+    <div style="font-weight:700;font-size:.9rem">{{ claim.property_type or '—' }}</div>
+    <div style="font-size:.78rem;color:#64748b">
+      {% if claim.property_sqft %}{{ claim.property_sqft }} sq ft{% endif %}
+      {% if claim.year_built %} &middot; Built {{ claim.year_built }}{% endif %}
+    </div>
   </div>
   <div class="card" style="margin:0;padding:1rem">
     <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.06em;margin-bottom:.5rem">Insurance</div>
-    <div style="font-weight:700">{{ claim.insurance_company or '—' }}</div>
-    <div style="font-size:.8rem;color:#64748b">{{ claim.policy_number or '' }}</div>
+    <div style="font-weight:700;font-size:.9rem">{{ claim.insurance_company or '—' }}</div>
+    <div style="font-size:.78rem;color:#64748b">{{ claim.policy_number or '' }}</div>
+    {% if claim.coverage_building %}
+    <div style="font-size:.75rem;color:#64748b;margin-top:3px">
+      Bldg: ${{ "{:,.0f}".format(claim.coverage_building) }}
+      {% if claim.coverage_contents %} &middot; Contents: ${{ "{:,.0f}".format(claim.coverage_contents) }}{% endif %}
+    </div>{% endif %}
   </div>
   <div class="card" style="margin:0;padding:1rem">
     <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.06em;margin-bottom:.5rem">Adjuster</div>
     <div style="font-weight:700">{{ claim.adjuster_name or '—' }}</div>
+    {% if claim.priority and claim.priority != 'Normal' %}
+    <div style="margin-top:4px">
+      <span style="font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:20px;
+        background:{% if claim.priority=='Urgent' %}rgba(239,68,68,.15){% elif claim.priority=='High' %}rgba(245,158,11,.15){% else %}rgba(16,185,129,.15){% endif %};
+        color:{% if claim.priority=='Urgent' %}#991b1b{% elif claim.priority=='High' %}#92400e{% else %}#065f46{% endif %}">
+        {{ claim.priority }} Priority
+      </span>
+    </div>{% endif %}
   </div>
   <div class="card" style="margin:0;padding:1rem;border:2px solid #10b981">
     <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;color:#10b981;letter-spacing:.06em;margin-bottom:.5rem">Total Estimate</div>
     <div style="font-size:1.5rem;font-weight:800;color:#10b981">${{ "{:,.2f}".format(claim.total_estimate) }}</div>
+    {% if claim.deductible %}
+    <div style="font-size:.75rem;color:#64748b;margin-top:3px">Deductible: ${{ "{:,.0f}".format(claim.deductible) }}</div>
+    {% endif %}
   </div>
 </div>
 

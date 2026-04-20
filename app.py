@@ -85,11 +85,30 @@ def init_db():
             adjuster_id     INTEGER REFERENCES users(id),
             client_name     TEXT NOT NULL,
             client_phone    TEXT DEFAULT '',
+            client_phone_alt TEXT DEFAULT '',
             client_email    TEXT DEFAULT '',
             property_address TEXT NOT NULL,
+            property_type   TEXT DEFAULT '',
+            property_sqft   TEXT DEFAULT '',
+            year_built      TEXT DEFAULT '',
+            num_floors      TEXT DEFAULT '',
             flood_date      TEXT NOT NULL,
+            flood_source    TEXT DEFAULT '',
+            water_category  TEXT DEFAULT '',
+            water_class     TEXT DEFAULT '',
+            water_depth_in  TEXT DEFAULT '',
+            date_water_removed TEXT DEFAULT '',
+            inspection_date TEXT DEFAULT '',
             insurance_company TEXT DEFAULT '',
             policy_number   TEXT DEFAULT '',
+            policy_type     TEXT DEFAULT '',
+            coverage_building REAL DEFAULT 0,
+            coverage_contents REAL DEFAULT 0,
+            deductible      REAL DEFAULT 0,
+            mortgage_company TEXT DEFAULT '',
+            mortgage_loan_number TEXT DEFAULT '',
+            cause_of_loss   TEXT DEFAULT '',
+            priority        TEXT DEFAULT 'Normal',
             status          TEXT DEFAULT 'New',
             total_estimate  REAL DEFAULT 0,
             notes           TEXT DEFAULT '',
@@ -155,6 +174,42 @@ def check_pw(pw, hashed):
     return hashlib.sha256(pw.encode()).hexdigest() == hashed
 
 init_db()
+
+def migrate_claims_columns():
+    new_cols = [
+        ('client_phone_alt','TEXT DEFAULT ""'),
+        ('property_type','TEXT DEFAULT ""'),
+        ('property_sqft','TEXT DEFAULT ""'),
+        ('year_built','TEXT DEFAULT ""'),
+        ('num_floors','TEXT DEFAULT ""'),
+        ('flood_source','TEXT DEFAULT ""'),
+        ('water_category','TEXT DEFAULT ""'),
+        ('water_class','TEXT DEFAULT ""'),
+        ('water_depth_in','TEXT DEFAULT ""'),
+        ('date_water_removed','TEXT DEFAULT ""'),
+        ('inspection_date','TEXT DEFAULT ""'),
+        ('policy_type','TEXT DEFAULT ""'),
+        ('coverage_building','REAL DEFAULT 0'),
+        ('coverage_contents','REAL DEFAULT 0'),
+        ('deductible','REAL DEFAULT 0'),
+        ('mortgage_company','TEXT DEFAULT ""'),
+        ('mortgage_loan_number','TEXT DEFAULT ""'),
+        ('cause_of_loss','TEXT DEFAULT ""'),
+        ('priority','TEXT DEFAULT "Normal"'),
+    ]
+    try:
+        db   = sqlite3.connect(DB_PATH)
+        cols = [r[1] for r in db.execute('PRAGMA table_info(claims)').fetchall()]
+        for col, typedef in new_cols:
+            if col not in cols:
+                db.execute(f'ALTER TABLE claims ADD COLUMN {col} {typedef}')
+        db.commit()
+        db.close()
+    except Exception:
+        pass
+
+migrate_claims_columns()
+
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 def login_required(f):
@@ -338,22 +393,44 @@ def new_claim():
     if request.method == 'POST':
         claim_num   = gen_claim_number()
         adjuster_id = request.form.get('adjuster_id') or session['user_id']
+        g  = lambda k, d='': request.form.get(k, d)  # shorthand
         db.execute('''INSERT INTO claims
-            (claim_number, adjuster_id, client_name, client_phone, client_email,
-             property_address, flood_date, insurance_company, policy_number, notes)
-            VALUES (?,?,?,?,?,?,?,?,?,?)''',
-            (claim_num,
-             adjuster_id,
-             request.form.get('client_name', ''),
-             request.form.get('client_phone', ''),
-             request.form.get('client_email', ''),
-             request.form.get('property_address', ''),
-             request.form.get('flood_date', ''),
-             request.form.get('insurance_company', ''),
-             request.form.get('policy_number', ''),
-             request.form.get('notes', '')))
+            (claim_number, adjuster_id, client_name, client_phone, client_phone_alt, client_email,
+             property_address, property_type, property_sqft, year_built, num_floors,
+             flood_date, flood_source, water_category, water_class, water_depth_in,
+             date_water_removed, inspection_date,
+             insurance_company, policy_number, policy_type,
+             coverage_building, coverage_contents, deductible,
+             mortgage_company, mortgage_loan_number,
+             cause_of_loss, priority, notes)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+            (claim_num, adjuster_id,
+             g('client_name'), g('client_phone'), g('client_phone_alt'), g('client_email'),
+             g('property_address'), g('property_type'), g('property_sqft'),
+             g('year_built'), g('num_floors'),
+             g('flood_date'), g('flood_source'), g('water_category'),
+             g('water_class'), g('water_depth_in'), g('date_water_removed'),
+             g('inspection_date'),
+             g('insurance_company'), g('policy_number'), g('policy_type'),
+             float(g('coverage_building') or 0), float(g('coverage_contents') or 0),
+             float(g('deductible') or 0),
+             g('mortgage_company'), g('mortgage_loan_number'),
+             g('cause_of_loss'), g('priority', 'Normal'), g('notes')))
         db.commit()
-        claim = db.execute('SELECT * FROM claims WHERE claim_number=?', (claim_num,)).fetchone()
+        # Handle initial photos submitted with the form
+        photos = request.files.getlist('initial_photos')
+        claim  = db.execute('SELECT * FROM claims WHERE claim_number=?', (claim_num,)).fetchone()
+        for photo in photos:
+            if photo and photo.filename and allowed_file(photo.filename):
+                ext      = photo.filename.rsplit('.', 1)[1].lower()
+                filename = f'{secrets.token_hex(12)}.{ext}'
+                save_path = os.path.join(UPLOAD_DIR, filename)
+                photo.save(save_path)
+                ai_desc = ai_describe_photo(save_path)
+                db.execute(
+                    'INSERT INTO photos (claim_id, filename, caption, ai_description) VALUES (?,?,?,?)',
+                    (claim['id'], filename, 'Initial site photo', ai_desc))
+        db.commit()
         flash(f'Claim {claim_num} created!', 'success')
         return redirect(url_for('claim_detail', claim_id=claim['id']))
     adjusters = db.execute('SELECT * FROM users ORDER BY name').fetchall() \
@@ -727,6 +804,42 @@ def willie_chat():
 # ── Willie External API ──────────────────────────────────────────────────────────────
 # All routes accept: Authorization: Bearer <willie_token>
 # Get token from: GET /willie/token (admin session required)
+
+# ── Instant AI photo analysis (used by new claim form before submit) ────────────────
+
+@app.route('/api/analyze-photo', methods=['POST'])
+@login_required
+def api_analyze_photo():
+    data     = request.get_json(silent=True) or {}
+    img_b64  = data.get('image', '')
+    mime     = data.get('mime', 'image/jpeg')
+    if not img_b64:
+        return jsonify({'error': 'no image'}), 400
+    key = get_setting('openrouter_api_key') or OPENROUTER_KEY
+    if not key:
+        return jsonify({'description': ''})
+    try:
+        selected_model = get_setting('ai_model', 'openai/gpt-4o-mini')
+        r = _req.post(
+            'https://openrouter.ai/api/v1/chat/completions',
+            headers={'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'},
+            json={
+                'model': selected_model,
+                'messages': [{'role': 'user', 'content': [
+                    {'type': 'text', 'text': (
+                        'You are a professional flood damage adjuster. Analyze this photo and provide '
+                        'a concise 2-3 sentence assessment covering: (1) what is damaged, '
+                        '(2) severity and water category if visible, '
+                        '(3) immediate repair needs. Be specific and professional.'
+                    )},
+                    {'type': 'image_url', 'image_url': {'url': f'data:{mime};base64,{img_b64}'}}
+                ]}],
+                'max_tokens': 200
+            }, timeout=30)
+        desc = r.json()['choices'][0]['message']['content']
+        return jsonify({'description': desc})
+    except Exception as e:
+        return jsonify({'description': ''})
 
 @app.route('/willie/token')
 @login_required
