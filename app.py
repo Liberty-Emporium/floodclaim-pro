@@ -47,6 +47,25 @@ ADMIN_EMAIL    = os.environ.get('ADMIN_EMAIL', 'admin@floodclaimpro.com')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin1234')
 OPENROUTER_KEY = os.environ.get('OPENROUTER_API_KEY', '')
 
+# ── Willie API token (stored in DB settings, auto-generated on first boot) ──
+def get_willie_token():
+    token = get_setting('willie_api_token')
+    if not token:
+        token = secrets.token_urlsafe(32)
+        # Use a direct DB write since app context may not exist yet
+        db = sqlite3.connect(DB_PATH)
+        db.execute("INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                   ('willie_api_token', token))
+        db.commit()
+        db.close()
+    return token
+
+def willie_auth():
+    """Verify Willie API token from Authorization header. Returns True if valid."""
+    auth  = request.headers.get('Authorization', '')
+    token = auth.replace('Bearer ', '').strip() if auth.startswith('Bearer ') else ''
+    return token and token == get_setting('willie_api_token')
+
 ALLOWED_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 def allowed_file(filename):
@@ -708,6 +727,162 @@ def willie_chat():
             db.commit()
 
     return jsonify({'reply': reply})
+
+# ── Willie External API ──────────────────────────────────────────────────────────────
+# All routes accept: Authorization: Bearer <willie_token>
+# Get token from: GET /willie/token (admin session required)
+
+@app.route('/willie/token')
+@login_required
+def willie_token():
+    """Show the Willie API token to admin users."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'admin required'}), 403
+    return jsonify({'token': get_willie_token(),
+                    'base_url': request.host_url.rstrip('/'),
+                    'note': 'Use this as Authorization: Bearer <token> in Willie actions'})
+
+@app.route('/willie/api/claims', methods=['GET'])
+def willie_list_claims():
+    if not willie_auth():
+        return jsonify({'error': 'unauthorized'}), 401
+    db = get_db()
+    claims = db.execute('''
+        SELECT c.id, c.claim_number, c.client_name, c.property_address,
+               c.flood_date, c.status, c.total_estimate,
+               u.name as adjuster_name
+        FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id
+        ORDER BY c.created_at DESC LIMIT 50
+    ''').fetchall()
+    return jsonify({'ok': True, 'claims': [dict(c) for c in claims], 'count': len(claims)})
+
+@app.route('/willie/api/claims', methods=['POST'])
+def willie_create_claim():
+    if not willie_auth():
+        return jsonify({'error': 'unauthorized'}), 401
+    data = request.get_json(silent=True) or {}
+
+    # Fill in demo data for any missing fields
+    client_name      = data.get('client_name', 'Demo Client').strip() or 'Demo Client'
+    client_phone     = data.get('client_phone', '(555) 000-0000')
+    client_email     = data.get('client_email', '')
+    property_address = data.get('property_address', '123 Flood St, Liberty, NC 27298').strip() or '123 Flood St, Liberty, NC 27298'
+    flood_date       = data.get('flood_date', datetime.datetime.now().strftime('%Y-%m-%d'))
+    insurance_company= data.get('insurance_company', '')
+    policy_number    = data.get('policy_number', '')
+    notes            = data.get('notes', '')
+
+    db = get_db()
+    # Get first admin user as default adjuster
+    adjuster = db.execute("SELECT id FROM users WHERE role='admin' ORDER BY id LIMIT 1").fetchone()
+    adjuster_id = adjuster['id'] if adjuster else 1
+
+    claim_num = gen_claim_number()
+    db.execute('''INSERT INTO claims
+        (claim_number, adjuster_id, client_name, client_phone, client_email,
+         property_address, flood_date, insurance_company, policy_number, notes)
+        VALUES (?,?,?,?,?,?,?,?,?,?)''',
+        (claim_num, adjuster_id, client_name, client_phone, client_email,
+         property_address, flood_date, insurance_company, policy_number, notes))
+    db.commit()
+    claim = db.execute('SELECT * FROM claims WHERE claim_number=?', (claim_num,)).fetchone()
+    return jsonify({
+        'ok': True,
+        'claim_id': claim['id'],
+        'claim_number': claim_num,
+        'message': f'Claim {claim_num} created for {client_name} at {property_address}',
+        'url': f'https://billy-floods.up.railway.app/claims/{claim["id"]}'
+    }), 201
+
+@app.route('/willie/api/claims/<int:claim_id>', methods=['GET'])
+def willie_get_claim(claim_id):
+    if not willie_auth():
+        return jsonify({'error': 'unauthorized'}), 401
+    db = get_db()
+    claim = db.execute('''
+        SELECT c.*, u.name as adjuster_name FROM claims c
+        LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?
+    ''', (claim_id,)).fetchone()
+    if not claim:
+        return jsonify({'error': 'Claim not found'}), 404
+    rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    room_data = []
+    for r in rooms:
+        items = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (r['id'],)).fetchall()
+        room_data.append({'room': dict(r), 'items': [dict(i) for i in items]})
+    return jsonify({'ok': True, 'claim': dict(claim), 'rooms': room_data})
+
+@app.route('/willie/api/claims/<int:claim_id>/status', methods=['POST'])
+def willie_update_status(claim_id):
+    if not willie_auth():
+        return jsonify({'error': 'unauthorized'}), 401
+    data   = request.get_json(silent=True) or {}
+    status = data.get('status', '').strip()
+    valid  = ['New', 'In Progress', 'Submitted', 'Closed']
+    if status not in valid:
+        return jsonify({'error': f'status must be one of: {valid}'}), 400
+    db = get_db()
+    db.execute('UPDATE claims SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', (status, claim_id))
+    db.commit()
+    return jsonify({'ok': True, 'claim_id': claim_id, 'status': status,
+                    'message': f'Claim {claim_id} status updated to {status}'})
+
+@app.route('/willie/api/claims/<int:claim_id>/rooms', methods=['POST'])
+def willie_add_room(claim_id):
+    if not willie_auth():
+        return jsonify({'error': 'unauthorized'}), 401
+    data = request.get_json(silent=True) or {}
+    name = data.get('room_name', data.get('name', '')).strip()
+    if not name:
+        return jsonify({'error': 'room_name required'}), 400
+    db    = get_db()
+    claim = db.execute('SELECT id FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim:
+        return jsonify({'error': 'Claim not found'}), 404
+    cur = db.execute('INSERT INTO rooms (claim_id, name) VALUES (?,?)', (claim_id, name))
+    db.commit()
+    return jsonify({'ok': True, 'room_id': cur.lastrowid, 'room_name': name,
+                    'message': f'Room "{name}" added to claim {claim_id}'})
+
+@app.route('/willie/api/claims/<int:claim_id>/rooms/<int:room_id>/items', methods=['POST'])
+def willie_add_item(claim_id, room_id):
+    if not willie_auth():
+        return jsonify({'error': 'unauthorized'}), 401
+    data      = request.get_json(silent=True) or {}
+    desc      = data.get('description', '').strip()
+    qty       = float(data.get('quantity', 1) or 1)
+    unit      = data.get('unit', 'ea')
+    unit_cost = float(data.get('unit_cost', 0) or 0)
+    total     = qty * unit_cost
+    if not desc:
+        return jsonify({'error': 'description required'}), 400
+    db = get_db()
+    db.execute('INSERT INTO line_items (room_id,description,quantity,unit,unit_cost,total) VALUES (?,?,?,?,?,?)',
+               (room_id, desc, qty, unit, unit_cost, total))
+    db.commit()
+    recalc_claim(claim_id)
+    return jsonify({'ok': True, 'description': desc, 'total': total,
+                    'message': f'Added "{desc}" — {qty} {unit} @ ${unit_cost} = ${total:.2f}'})
+
+@app.route('/willie/api/dashboard', methods=['GET'])
+def willie_dashboard():
+    if not willie_auth():
+        return jsonify({'error': 'unauthorized'}), 401
+    db = get_db()
+    claims = db.execute('SELECT status, total_estimate FROM claims').fetchall()
+    stats = {
+        'total':       len(claims),
+        'new':         sum(1 for c in claims if c['status'] == 'New'),
+        'in_progress': sum(1 for c in claims if c['status'] == 'In Progress'),
+        'submitted':   sum(1 for c in claims if c['status'] == 'Submitted'),
+        'closed':      sum(1 for c in claims if c['status'] == 'Closed'),
+        'pipeline_value': sum(c['total_estimate'] for c in claims if c['status'] != 'Closed'),
+    }
+    recent = db.execute('''
+        SELECT c.id, c.claim_number, c.client_name, c.status, c.total_estimate
+        FROM claims c ORDER BY c.created_at DESC LIMIT 5
+    ''').fetchall()
+    return jsonify({'ok': True, 'stats': stats, 'recent_claims': [dict(r) for r in recent]})
 
 @app.route('/health')
 def health():
