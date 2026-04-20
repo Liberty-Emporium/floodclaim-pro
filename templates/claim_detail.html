@@ -18,7 +18,11 @@
   }
   .photo-btn-edit   { background: rgba(255,255,255,.92); color: #1e40af; }
   .photo-btn-delete { background: rgba(239,68,68,.9);    color: #fff;    }
+  .photo-btn-ai     { background: rgba(6,182,212,.9);    color: #fff;    }
   .photo-btn:hover  { transform: scale(1.1); }
+  .ai-analyzing-tag { color: var(--cyan); font-size: .72rem; font-style: italic; }
+  @keyframes ai-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .ai-analyzing-tag { animation: ai-pulse .8s infinite; }
 
   /* Edit modal */
   .modal-backdrop {
@@ -157,12 +161,14 @@
            data-src="{{ url_for('uploaded_file', filename=photo.filename) }}">
         <img src="{{ url_for('uploaded_file', filename=photo.filename) }}" alt="{{ photo.caption|e }}"/>
         <div class="photo-actions">
+          <button class="photo-btn photo-btn-ai" title="Re-analyze with AI" onclick="reanalyzePhoto({{ photo.id }}, this)">🤖</button>
           <button class="photo-btn photo-btn-edit" title="Edit" onclick="openEditModalFromCard(this.closest('.photo-card'))">✏️</button>
           <button class="photo-btn photo-btn-delete" title="Delete" onclick="deletePhoto({{ photo.id }})">✕</button>
         </div>
         <div class="photo-card-body">
           {% if photo.caption %}<div style="font-weight:600;font-size:.8rem;margin-bottom:.3rem">{{ photo.caption }}</div>{% endif %}
-          {% if photo.ai_description %}<div class="ai-tag">🤖 AI Analysis</div><p>{{ photo.ai_description }}</p>{% endif %}
+          <div class="ai-tag">🤖 AI Analysis</div>
+          <p id="ai-desc-{{ photo.id }}">{{ photo.ai_description or 'No analysis yet — click 🤖 to analyze.' }}</p>
         </div>
       </div>
       {% endfor %}
@@ -199,12 +205,14 @@
              data-src="{{ url_for('uploaded_file', filename=photo.filename) }}">
           <img src="{{ url_for('uploaded_file', filename=photo.filename) }}" alt="{{ photo.caption|e }}"/>
           <div class="photo-actions">
+            <button class="photo-btn photo-btn-ai" title="Re-analyze with AI" onclick="reanalyzePhoto({{ photo.id }}, this)">🤖</button>
             <button class="photo-btn photo-btn-edit" title="Edit" onclick="openEditModalFromCard(this.closest('.photo-card'))">✏️</button>
             <button class="photo-btn photo-btn-delete" title="Delete" onclick="deletePhoto({{ photo.id }})">✕</button>
           </div>
           <div class="photo-card-body">
             {% if photo.caption %}<div style="font-weight:600;font-size:.8rem;margin-bottom:.3rem">{{ photo.caption }}</div>{% endif %}
-            {% if photo.ai_description %}<div class="ai-tag">🤖 AI Analysis</div><p>{{ photo.ai_description }}</p>{% endif %}
+            <div class="ai-tag">🤖 AI Analysis</div>
+            <p id="ai-desc-{{ photo.id }}">{{ photo.ai_description or 'No analysis yet — click 🤖 to analyze.' }}</p>
           </div>
         </div>
         {% endfor %}
@@ -327,6 +335,27 @@ async function deletePhoto(id) {
   } else {
     alert('Could not delete photo.');
   }
+}
+
+async function reanalyzePhoto(photoId, btn) {
+  const descEl = document.getElementById('ai-desc-' + photoId);
+  const origBtn = btn.textContent;
+  btn.textContent = '⏳';
+  btn.disabled = true;
+  descEl.innerHTML = '<span class="ai-analyzing-tag">⏳ Analyzing...</span>';
+  try {
+    const r = await fetch('/photos/' + photoId + '/analyze', {method: 'POST'});
+    const data = await r.json();
+    if (data.description) {
+      descEl.textContent = data.description;
+    } else if (data.error) {
+      descEl.textContent = data.error;
+    }
+  } catch(e) {
+    descEl.textContent = 'Analysis failed — check your OpenRouter key in Settings.';
+  }
+  btn.textContent = origBtn;
+  btn.disabled = false;
 }
 
 function openEditModalFromCard(card) {

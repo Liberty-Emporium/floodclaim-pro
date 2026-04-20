@@ -571,6 +571,23 @@ def delete_photo(photo_id):
     db.commit()
     return jsonify({'ok': True})
 
+@app.route('/photos/<int:photo_id>/analyze', methods=['POST'])
+@login_required
+def analyze_photo_route(photo_id):
+    db    = get_db()
+    photo = db.execute('SELECT * FROM photos WHERE id=?', (photo_id,)).fetchone()
+    if not photo:
+        return jsonify({'error': 'Photo not found'}), 404
+    image_path = os.path.join(UPLOAD_DIR, photo['filename'])
+    if not os.path.exists(image_path):
+        return jsonify({'error': 'Image file not found on disk'}), 404
+    desc = ai_describe_photo(image_path)
+    if not desc:
+        return jsonify({'error': 'AI unavailable — add an OpenRouter key in ⚙️ Settings'})
+    db.execute('UPDATE photos SET ai_description=? WHERE id=?', (desc, photo_id))
+    db.commit()
+    return jsonify({'ok': True, 'description': desc})
+
 @app.route('/photos/<int:photo_id>/edit', methods=['POST'])
 @login_required
 def edit_photo(photo_id):
