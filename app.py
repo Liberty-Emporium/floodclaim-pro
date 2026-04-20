@@ -221,11 +221,12 @@ def ai_describe_photo(image_path):
             img_b64 = base64.b64encode(f.read()).decode()
         ext  = image_path.rsplit('.', 1)[-1].lower()
         mime = f'image/{ext}' if ext != 'jpg' else 'image/jpeg'
+        selected_model = get_setting('ai_model', 'openai/gpt-4o-mini')
         r = _req.post(
             'https://openrouter.ai/api/v1/chat/completions',
             headers={'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'},
             json={
-                'model': 'openai/gpt-4o-mini',
+                'model': selected_model,
                 'messages': [{
                     'role': 'user',
                     'content': [
@@ -476,6 +477,9 @@ def settings():
             set_setting('openrouter_api_key', openrouter_key)
         elif request.form.get('clear_openrouter'):
             set_setting('openrouter_api_key', '')
+        selected_model = request.form.get('ai_model', '').strip()
+        if selected_model:
+            set_setting('ai_model', selected_model)
         flash('Settings saved!', 'success')
         return redirect(url_for('settings'))
     current_key = get_setting('openrouter_api_key')
@@ -485,11 +489,13 @@ def settings():
             masked_key = current_key[:8] + '•' * (len(current_key) - 12) + current_key[-4:]
         else:
             masked_key = '••••••••'
-    env_key_set = bool(OPENROUTER_KEY)
+    env_key_set    = bool(OPENROUTER_KEY)
+    current_model  = get_setting('ai_model', 'openai/gpt-4o-mini')
     return render_template('settings.html',
                            masked_key=masked_key,
                            key_is_set=bool(current_key),
-                           env_key_set=env_key_set)
+                           env_key_set=env_key_set,
+                           current_model=current_model)
 
 # ── Admin: Team Management ────────────────────────────────────────────────────
 

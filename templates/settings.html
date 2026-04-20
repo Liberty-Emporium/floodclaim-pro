@@ -4,7 +4,7 @@
 
 {% block extra_css %}
 <style>
-  .settings-section { max-width: 640px; }
+  .settings-section { max-width: 680px; }
   .key-status {
     display: inline-flex; align-items: center; gap: .4rem;
     padding: .3rem .75rem; border-radius: 999px; font-size: .75rem; font-weight: 700;
@@ -25,6 +25,39 @@
   }
   .info-box strong { color: var(--cyan); }
   .divider { border: none; border-top: 1px solid var(--gray-200); margin: 1.5rem 0; }
+
+  /* Model picker */
+  .model-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .6rem;
+    margin-top: .5rem;
+  }
+  .model-option { display: none; }
+  .model-card {
+    display: flex; flex-direction: column; gap: .2rem;
+    border: 2px solid var(--gray-200); border-radius: 10px;
+    padding: .75rem 1rem; cursor: pointer;
+    transition: border-color .15s, background .15s;
+    user-select: none;
+  }
+  .model-option:checked + .model-card {
+    border-color: var(--blue-light);
+    background: rgba(59,130,246,.06);
+  }
+  .model-card:hover { border-color: var(--blue-light); background: rgba(59,130,246,.03); }
+  .model-card .m-name { font-size: .85rem; font-weight: 700; color: var(--gray-800); }
+  .model-card .m-provider { font-size: .7rem; font-weight: 600; color: var(--gray-400); text-transform: uppercase; letter-spacing: .05em; }
+  .model-card .m-tags { display: flex; gap: .3rem; flex-wrap: wrap; margin-top: .3rem; }
+  .m-tag {
+    font-size: .65rem; font-weight: 700; padding: .15rem .4rem;
+    border-radius: 4px; text-transform: uppercase; letter-spacing: .04em;
+  }
+  .tag-fast    { background: rgba(16,185,129,.12); color: #065f46; }
+  .tag-smart   { background: rgba(59,130,246,.12); color: #1e40af; }
+  .tag-best    { background: rgba(245,158,11,.15); color: #92400e; }
+  .tag-vision  { background: rgba(6,182,212,.12);  color: #164e63; }
+  .tag-free    { background: rgba(16,185,129,.2);  color: #065f46; }
 </style>
 {% endblock %}
 
@@ -45,34 +78,84 @@
     </div>
 
     <div class="info-box">
-      <strong>OpenRouter</strong> powers the AI photo analysis on every claim.
-      Add your key here and it's stored securely in the database — no need to redeploy.
+      <strong>OpenRouter</strong> powers AI photo analysis on every claim.
+      Paste your key, pick a model, hit Save — no redeploy needed.
       Get a free key at <strong>openrouter.ai</strong>.
     </div>
 
-    {% if key_is_set %}
-    <!-- Current Key Display -->
-    <div class="form-group">
-      <label>Current Key</label>
-      <div class="masked-key">{{ masked_key }}</div>
-    </div>
-    <hr class="divider">
-    {% endif %}
-
-    <!-- Save / Update Key Form -->
     <form method="POST">
+
+      <!-- API Key -->
+      {% if key_is_set %}
+      <div class="form-group">
+        <label>Current Key</label>
+        <div class="masked-key">{{ masked_key }}</div>
+      </div>
+      {% endif %}
+
       <div class="form-group">
         <label>{% if key_is_set %}Replace{% else %}Add{% endif %} OpenRouter API Key</label>
         <input class="form-control" type="password" name="openrouter_api_key"
                placeholder="sk-or-v1-..." autocomplete="new-password"/>
         <div style="font-size:.78rem;color:var(--gray-400);margin-top:.35rem;">
-          Paste your key above. It will be stored in the database and used immediately.
+          Leave blank to keep the current key.
         </div>
       </div>
+
+      <hr class="divider">
+
+      <!-- Model Picker -->
+      <div class="form-group" style="margin-bottom:1.25rem">
+        <label style="margin-bottom:.6rem;display:block;">AI Model for Photo Analysis</label>
+        <div class="model-grid">
+
+          {% set models = [
+            ('openai/gpt-4o-mini',          'GPT-4o Mini',       'OpenAI',      ['fast','vision']),
+            ('openai/gpt-4o',               'GPT-4o',            'OpenAI',      ['smart','vision','best']),
+            ('openai/o1',                   'o1',                'OpenAI',      ['best','vision']),
+            ('openai/o3-mini',              'o3-mini',           'OpenAI',      ['fast','smart']),
+            ('anthropic/claude-opus-4',     'Claude Opus 4',     'Anthropic',   ['best','vision']),
+            ('anthropic/claude-sonnet-4-5', 'Claude Sonnet 4.5', 'Anthropic',   ['smart','vision']),
+            ('anthropic/claude-3-5-haiku',  'Claude 3.5 Haiku',  'Anthropic',   ['fast','vision']),
+            ('google/gemini-2.5-pro',       'Gemini 2.5 Pro',    'Google',      ['best','vision']),
+            ('google/gemini-2.0-flash',     'Gemini 2.0 Flash',  'Google',      ['fast','vision']),
+            ('google/gemini-2.5-flash',     'Gemini 2.5 Flash',  'Google',      ['fast','smart','vision']),
+            ('meta-llama/llama-4-maverick', 'Llama 4 Maverick',  'Meta',        ['smart','vision','free']),
+            ('meta-llama/llama-4-scout',    'Llama 4 Scout',     'Meta',        ['fast','vision','free']),
+            ('x-ai/grok-3-mini-beta',       'Grok-3 Mini',       'xAI',         ['fast','smart']),
+            ('x-ai/grok-2-vision-1212',     'Grok-2 Vision',     'xAI',         ['smart','vision']),
+            ('deepseek/deepseek-r1',        'DeepSeek R1',       'DeepSeek',    ['best','smart']),
+            ('mistralai/mistral-small-3.1', 'Mistral Small 3.1', 'Mistral',     ['fast','vision','free']),
+          ] %}
+
+          {% for model_id, model_name, provider, tags in models %}
+          <label style="display:contents">
+            <input class="model-option" type="radio" name="ai_model"
+                   value="{{ model_id }}"
+                   {% if current_model == model_id %}checked{% endif %}/>
+            <div class="model-card">
+              <span class="m-provider">{{ provider }}</span>
+              <span class="m-name">{{ model_name }}</span>
+              <div class="m-tags">
+                {% for tag in tags %}
+                <span class="m-tag tag-{{ tag }}">{{ tag }}</span>
+                {% endfor %}
+              </div>
+            </div>
+          </label>
+          {% endfor %}
+
+        </div>
+        <div style="font-size:.78rem;color:var(--gray-400);margin-top:.6rem;">
+          All models support vision (photo analysis). <strong>Free</strong> models cost nothing on OpenRouter.
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <!-- Save / Remove -->
       <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;">
-        <button type="submit" class="btn btn-primary">
-          💾 Save Key
-        </button>
+        <button type="submit" class="btn btn-primary">💾 Save Settings</button>
         {% if key_is_set %}
         <button type="submit" name="clear_openrouter" value="1"
                 class="btn btn-ghost btn-sm"
@@ -81,6 +164,7 @@
         </button>
         {% endif %}
       </div>
+
     </form>
 
     {% if env_key_set and not key_is_set %}
@@ -98,13 +182,12 @@
     </div>
     <div style="font-size:.875rem;color:var(--gray-600);line-height:1.7;">
       <p style="margin-bottom:.75rem;">
-        When you upload a damage photo on a claim, FloodClaim Pro sends it to
-        <strong>OpenRouter → GPT-4o Mini</strong> for instant damage assessment.
+        When you upload a damage photo on a claim, FloodClaim Pro sends it to your
+        selected model via OpenRouter for instant damage assessment.
       </p>
       <p style="margin-bottom:.75rem;">
         The AI describes what it sees — water damage levels, affected materials,
-        likely repair needs — and saves the description right alongside the photo
-        on the claim report.
+        likely repair needs — and saves the description alongside the photo on the claim report.
       </p>
       <p>
         <strong>Key lookup order:</strong>
