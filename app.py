@@ -47,25 +47,6 @@ ADMIN_EMAIL    = os.environ.get('ADMIN_EMAIL', 'admin@floodclaimpro.com')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin1234')
 OPENROUTER_KEY = os.environ.get('OPENROUTER_API_KEY', '')
 
-# ── Willie API token (stored in DB settings, auto-generated on first boot) ──
-def get_willie_token():
-    token = get_setting('willie_api_token')
-    if not token:
-        token = secrets.token_urlsafe(32)
-        # Use a direct DB write since app context may not exist yet
-        db = sqlite3.connect(DB_PATH)
-        db.execute("INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                   ('willie_api_token', token))
-        db.commit()
-        db.close()
-    return token
-
-def willie_auth():
-    """Verify Willie API token from Authorization header. Returns True if valid."""
-    auth  = request.headers.get('Authorization', '')
-    token = auth.replace('Bearer ', '').strip() if auth.startswith('Bearer ') else ''
-    return token and token == get_setting('willie_api_token')
-
 ALLOWED_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 def allowed_file(filename):
@@ -230,6 +211,21 @@ def set_setting(key, value):
         (key, value))
     db.commit()
     db.close()
+
+# ── Willie API token ─────────────────────────────────────────────────────────────────
+def get_willie_token():
+    """Get or auto-generate the Willie API token."""
+    token = get_setting('willie_api_token')
+    if not token:
+        token = secrets.token_urlsafe(32)
+        set_setting('willie_api_token', token)
+    return token
+
+def willie_auth():
+    """Verify Willie API token from Authorization header."""
+    auth  = request.headers.get('Authorization', '')
+    token = auth.replace('Bearer ', '').strip() if auth.startswith('Bearer ') else ''
+    return bool(token and token == get_setting('willie_api_token'))
 
 def ai_describe_photo(image_path):
     key = get_setting('openrouter_api_key') or OPENROUTER_KEY
