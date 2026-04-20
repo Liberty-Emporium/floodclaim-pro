@@ -126,6 +126,20 @@ def init_db():
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL DEFAULT ''
         );
+        CREATE TABLE IF NOT EXISTS willie_conversations (
+            id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER REFERENCES users(id),
+            title   TEXT NOT NULL DEFAULT 'New Conversation',
+            created TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS willie_messages (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id INTEGER REFERENCES willie_conversations(id) ON DELETE CASCADE,
+            role            TEXT NOT NULL,
+            content         TEXT NOT NULL,
+            created         TEXT DEFAULT CURRENT_TIMESTAMP
+        );
     ''')
     cur = db.execute('SELECT id FROM users WHERE email=?', (ADMIN_EMAIL,))
     if not cur.fetchone():
@@ -583,6 +597,117 @@ def delete_team_member(user_id):
     db.commit()
     flash('Team member removed.', 'success')
     return redirect(url_for('team'))
+
+# ── Willie Chat ────────────────────────────────────────────────────────────────
+
+@app.route('/willie')
+@login_required
+def willie():
+    db    = get_db()
+    convs = db.execute(
+        'SELECT * FROM willie_conversations WHERE user_id=? ORDER BY updated DESC LIMIT 100',
+        (session['user_id'],)).fetchall()
+    return render_template('willie.html', conversations=convs)
+
+@app.route('/willie/conversations', methods=['POST'])
+@login_required
+def willie_new_conversation():
+    db  = get_db()
+    cur = db.execute('INSERT INTO willie_conversations (user_id) VALUES (?)', (session['user_id'],))
+    db.commit()
+    return jsonify({'id': cur.lastrowid, 'title': 'New Conversation'})
+
+@app.route('/willie/conversations/<int:conv_id>')
+@login_required
+def willie_get_conversation(conv_id):
+    db   = get_db()
+    conv = db.execute('SELECT * FROM willie_conversations WHERE id=? AND user_id=?',
+                      (conv_id, session['user_id'])).fetchone()
+    if not conv:
+        return jsonify({'error': 'not found'}), 404
+    msgs = db.execute('SELECT role,content,created FROM willie_messages WHERE conversation_id=? ORDER BY id',
+                      (conv_id,)).fetchall()
+    return jsonify({'conversation': dict(conv), 'messages': [dict(m) for m in msgs]})
+
+@app.route('/willie/conversations/<int:conv_id>', methods=['DELETE'])
+@login_required
+def willie_delete_conversation(conv_id):
+    db = get_db()
+    db.execute('DELETE FROM willie_messages WHERE conversation_id=?', (conv_id,))
+    db.execute('DELETE FROM willie_conversations WHERE id=? AND user_id=?', (conv_id, session['user_id']))
+    db.commit()
+    return jsonify({'ok': True})
+
+@app.route('/willie/conversations/<int:conv_id>/messages', methods=['POST'])
+@login_required
+def willie_save_message(conv_id):
+    db      = get_db()
+    conv    = db.execute('SELECT * FROM willie_conversations WHERE id=? AND user_id=?',
+                         (conv_id, session['user_id'])).fetchone()
+    if not conv:
+        return jsonify({'error': 'not found'}), 404
+    data    = request.get_json(silent=True) or {}
+    role    = data.get('role', 'user')
+    content = data.get('content', '').strip()
+    if not content:
+        return jsonify({'error': 'content required'}), 400
+    db.execute('INSERT INTO willie_messages (conversation_id, role, content) VALUES (?,?,?)',
+               (conv_id, role, content))
+    # Auto-title from first user message
+    if role == 'user' and conv['title'] == 'New Conversation':
+        title = content[:60] + ('...' if len(content) > 60 else '')
+        db.execute('UPDATE willie_conversations SET title=?, updated=CURRENT_TIMESTAMP WHERE id=?',
+                   (title, conv_id))
+    else:
+        db.execute('UPDATE willie_conversations SET updated=CURRENT_TIMESTAMP WHERE id=?', (conv_id,))
+    db.commit()
+    return jsonify({'ok': True})
+
+@app.route('/willie/chat', methods=['POST'])
+@login_required
+def willie_chat():
+    """Proxy to the Willie AI widget endpoint and save to history."""
+    data       = request.get_json(silent=True) or {}
+    message    = data.get('message', '').strip()
+    history    = data.get('history', [])
+    conv_id    = data.get('conversation_id')
+    session_id = data.get('session_id', '')
+    if not message:
+        return jsonify({'error': 'message required'}), 400
+
+    WILLIE_AGENT_ID = get_setting('willie_agent_id', 'F5J8yYT6a6GrppjviN6p8w')
+    WIDGET_BASE     = 'https://ai-agent-widget-production.up.railway.app'
+
+    try:
+        payload = json.dumps({'message': message, 'history': history[-10:],
+                              'session_id': session_id or f'willie-{session["user_id"]}'}).encode()
+        req = _req.post(f'{WIDGET_BASE}/chat/{WILLIE_AGENT_ID}',
+                        headers={'Content-Type': 'application/json'},
+                        data=payload, timeout=30)
+        result  = req.json()
+        reply   = result.get('reply', 'Willie is unavailable right now.')
+    except Exception as e:
+        reply = f'Willie is unavailable right now. ({str(e)[:60]})'
+
+    # Save both messages to history if conv_id provided
+    if conv_id:
+        db = get_db()
+        conv = db.execute('SELECT * FROM willie_conversations WHERE id=? AND user_id=?',
+                          (conv_id, session['user_id'])).fetchone()
+        if conv:
+            db.execute('INSERT INTO willie_messages (conversation_id,role,content) VALUES (?,?,?)',
+                       (conv_id, 'user', message))
+            db.execute('INSERT INTO willie_messages (conversation_id,role,content) VALUES (?,?,?)',
+                       (conv_id, 'assistant', reply))
+            if conv['title'] == 'New Conversation':
+                title = message[:60] + ('...' if len(message) > 60 else '')
+                db.execute('UPDATE willie_conversations SET title=?,updated=CURRENT_TIMESTAMP WHERE id=?',
+                           (title, conv_id))
+            else:
+                db.execute('UPDATE willie_conversations SET updated=CURRENT_TIMESTAMP WHERE id=?', (conv_id,))
+            db.commit()
+
+    return jsonify({'reply': reply})
 
 @app.route('/health')
 def health():

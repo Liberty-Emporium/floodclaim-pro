@@ -1,0 +1,384 @@
+{% extends 'base.html' %}
+{% block title %}Willie — FloodClaim Pro{% endblock %}
+{% block page_title %}🌊 Chat with Willie{% endblock %}
+
+{% block extra_css %}
+<style>
+  .willie-wrap {
+    display: flex; height: calc(100vh - 61px); margin: -2rem;
+    overflow: hidden;
+  }
+
+  /* ── Sidebar ── */
+  .willie-sidebar {
+    width: 260px; flex-shrink: 0; background: #fff;
+    border-right: 1px solid var(--gray-200);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .ws-header {
+    padding: 1rem; border-bottom: 1px solid var(--gray-200);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .ws-title { font-weight: 700; font-size: .82rem; color: var(--gray-400);
+    text-transform: uppercase; letter-spacing: .07em; flex: 1; }
+  .new-btn {
+    padding: 5px 10px; background: var(--blue); color: #fff;
+    border: none; border-radius: 7px; font-size: .75rem; font-weight: 700;
+    cursor: pointer; font-family: inherit; transition: background .15s;
+  }
+  .new-btn:hover { background: #1d35a8; }
+  .conv-list { flex: 1; overflow-y: auto; padding: 6px; }
+  .conv-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 10px; border-radius: 8px; cursor: pointer;
+    border: 1px solid transparent; transition: all .15s; margin-bottom: 2px;
+  }
+  .conv-item:hover { background: var(--gray-50); border-color: var(--gray-200); }
+  .conv-item.active { background: rgba(6,182,212,.08); border-color: rgba(6,182,212,.3); }
+  .conv-info { flex: 1; min-width: 0; }
+  .conv-title { font-size: .8rem; font-weight: 600; color: var(--gray-800);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conv-date { font-size: .68rem; color: var(--gray-400); margin-top: 1px; }
+  .conv-del {
+    opacity: 0; background: none; border: none; color: var(--red);
+    cursor: pointer; font-size: .8rem; padding: 2px 5px; border-radius: 4px;
+  }
+  .conv-item:hover .conv-del { opacity: 1; }
+  .sidebar-empty { padding: 1.5rem 1rem; text-align: center;
+    color: var(--gray-400); font-size: .82rem; line-height: 1.7; }
+
+  /* ── Main chat ── */
+  .willie-main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; background: var(--gray-50); }
+
+  .chat-messages {
+    flex: 1; overflow-y: auto; padding: 1.5rem 2rem;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .chat-messages::-webkit-scrollbar { width: 4px; }
+  .chat-messages::-webkit-scrollbar-thumb { background: var(--gray-200); border-radius: 2px; }
+
+  .chat-msg { display: flex; gap: 10px; max-width: 80%; animation: msgIn .2s ease; }
+  @keyframes msgIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+  .chat-msg.user { align-self: flex-end; flex-direction: row-reverse; }
+  .chat-msg.willie { align-self: flex-start; }
+  .msg-av {
+    width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .9rem; margin-top: 2px;
+  }
+  .chat-msg.willie .msg-av { background: rgba(6,182,212,.15); }
+  .chat-msg.user .msg-av { background: var(--gray-100); }
+  .msg-body { display: flex; flex-direction: column; gap: 3px; }
+  .chat-msg.user .msg-body { align-items: flex-end; }
+  .msg-name { font-size: .68rem; color: var(--gray-400); font-weight: 600;
+    text-transform: uppercase; letter-spacing: .05em; }
+  .msg-bubble {
+    padding: 10px 14px; border-radius: 14px; font-size: .875rem; line-height: 1.6;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .chat-msg.willie .msg-bubble {
+    background: #fff; border: 1px solid var(--gray-200); border-radius: 14px 14px 14px 4px;
+  }
+  .chat-msg.user .msg-bubble {
+    background: var(--blue); color: #fff; border-radius: 14px 14px 4px 14px;
+  }
+  .msg-time { font-size: .66rem; color: var(--gray-400); }
+
+  .typing-dots { display: flex; gap: 4px; padding: 12px 14px; }
+  .typing-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gray-400);
+    animation: dot 1.2s infinite; }
+  .typing-dot:nth-child(2) { animation-delay: .2s; }
+  .typing-dot:nth-child(3) { animation-delay: .4s; }
+  @keyframes dot { 0%,60%,100%{transform:translateY(0);opacity:.4} 30%{transform:translateY(-6px);opacity:1} }
+
+  /* Welcome */
+  .willie-welcome {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 12px; padding: 2rem; text-align: center;
+  }
+  .welcome-wave { font-size: 3rem; animation: wave 2s ease-in-out infinite; }
+  @keyframes wave { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+  .welcome-title { font-size: 1.5rem; font-weight: 800; color: var(--gray-800); }
+  .welcome-sub { color: var(--gray-400); font-size: .9rem; max-width: 380px; line-height: 1.7; }
+  .quick-prompts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 4px; }
+  .qp {
+    padding: 7px 14px; background: #fff; border: 1px solid var(--gray-200);
+    border-radius: 20px; font-size: .8rem; cursor: pointer; color: var(--gray-800);
+    transition: all .15s; font-family: inherit;
+  }
+  .qp:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  /* Input */
+  .chat-input-area {
+    padding: 1rem 2rem 1.25rem; border-top: 1px solid var(--gray-200);
+    background: #fff; flex-shrink: 0;
+  }
+  .chat-input-row { display: flex; gap: 10px; align-items: flex-end; }
+  .chat-textarea {
+    flex: 1; background: var(--gray-50); border: 1.5px solid var(--gray-200);
+    border-radius: 12px; padding: 10px 14px; color: var(--gray-800);
+    font-family: inherit; font-size: .9rem; resize: none; outline: none;
+    max-height: 120px; transition: border-color .2s; line-height: 1.5;
+  }
+  .chat-textarea:focus { border-color: var(--cyan); }
+  .chat-textarea::placeholder { color: var(--gray-400); }
+  .send-btn {
+    width: 42px; height: 42px; border-radius: 12px;
+    background: var(--cyan); border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; color: #fff; transition: all .2s; flex-shrink: 0;
+  }
+  .send-btn:hover { background: #0891b2; transform: scale(1.05); }
+  .send-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+  .input-hint { font-size: .7rem; color: var(--gray-400); margin-top: 4px; }
+
+  @media(max-width:700px) { .willie-sidebar { display: none; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="willie-wrap">
+
+  <!-- Sidebar -->
+  <aside class="willie-sidebar">
+    <div class="ws-header">
+      <span class="ws-title">💬 History</span>
+      <button class="new-btn" onclick="newConversation()">+ New</button>
+    </div>
+    <div class="conv-list" id="conv-list">
+      {% if conversations %}
+        {% for c in conversations %}
+        <div class="conv-item" id="conv-{{ c.id }}" onclick="loadConversation({{ c.id }})">
+          <div class="conv-info">
+            <div class="conv-title">{{ c.title }}</div>
+            <div class="conv-date">{{ c.updated[:10] }}</div>
+          </div>
+          <button class="conv-del" title="Delete" onclick="deleteConversation(event, {{ c.id }})">✕</button>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="sidebar-empty">No conversations yet.<br>Start chatting with Willie!</div>
+      {% endif %}
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="willie-main">
+    <div class="chat-messages" id="chat-messages">
+      <div class="willie-welcome" id="welcome">
+        <div class="welcome-wave">🌊</div>
+        <div class="welcome-title">Hey, I'm Willie</div>
+        <div class="welcome-sub">Your flood damage expert. Ask me anything about claims, damage assessment, insurance, or anything inside FloodClaim Pro.</div>
+        <div class="quick-prompts">
+          <button class="qp" onclick="quickSend('What should I do first after a flood?')">🚨 First steps after a flood</button>
+          <button class="qp" onclick="quickSend('How do I document flood damage properly?')">📸 Document damage</button>
+          <button class="qp" onclick="quickSend('What are the claim statuses and what does each mean?')">📋 Claim statuses</button>
+          <button class="qp" onclick="quickSend('How do I create a new claim?')">➕ Create a claim</button>
+          <button class="qp" onclick="quickSend('What is Category 3 black water damage?')">💧 Water categories</button>
+          <button class="qp" onclick="quickSend('How do I generate a report for insurance?')">📄 Generate report</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-input-area">
+      <div class="chat-input-row">
+        <textarea class="chat-textarea" id="chat-input" rows="1"
+          placeholder="Ask Willie anything..."
+          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()">➤</button>
+      </div>
+      <div class="input-hint">Enter to send · Shift+Enter for new line</div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentConvId = null;
+let chatHistory   = [];
+let isThinking    = false;
+const SESSION_ID  = 'willie-{{ session.user_id }}-' + Date.now();
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+function quickSend(text) {
+  document.getElementById('chat-input').value = text;
+  sendMessage();
+}
+function timeStr() {
+  return new Date().toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'});
+}
+function dateLabel(iso) {
+  const d = new Date(iso), now = new Date(), diff = (now-d)/86400000;
+  if (diff < 1) return 'Today';
+  if (diff < 2) return 'Yesterday';
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Messages ──────────────────────────────────────────────────────────────
+function addMessage(role, content, typing=false, iso=null) {
+  document.getElementById('welcome')?.remove();
+  const msgs = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = `chat-msg ${role === 'user' ? 'user' : 'willie'}`;
+  if (typing) div.id = 'typing-msg';
+  const av   = role === 'user' ? '👤' : '🌊';
+  const name = role === 'user' ? '{{ session.name or session.email }}' : 'Willie';
+  div.innerHTML = typing
+    ? `<div class="msg-av">${av}</div>
+       <div class="msg-body">
+         <div class="msg-name">${name}</div>
+         <div class="msg-bubble"><div class="typing-dots">
+           <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+         </div></div>
+       </div>`
+    : `<div class="msg-av">${av}</div>
+       <div class="msg-body">
+         <div class="msg-name">${name}</div>
+         <div class="msg-bubble">${esc(content)}</div>
+         <div class="msg-time">${timeStr()}</div>
+       </div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+// ── Conversations ─────────────────────────────────────────────────────────
+async function newConversation() {
+  const r = await fetch('/willie/conversations', {method:'POST'});
+  const c = await r.json();
+  currentConvId = c.id;
+  chatHistory   = [];
+  clearMessages();
+  refreshSidebar(c.id, c.title);
+  document.getElementById('chat-input').focus();
+}
+
+async function loadConversation(convId) {
+  const r = await fetch(`/willie/conversations/${convId}`);
+  const data = await r.json();
+  if (data.error) return;
+  currentConvId = convId;
+  chatHistory   = [];
+  clearMessages();
+  document.querySelectorAll('.conv-item').forEach(e => e.classList.remove('active'));
+  document.getElementById(`conv-${convId}`)?.classList.add('active');
+  for (const m of data.messages) {
+    addMessage(m.role === 'assistant' ? 'willie' : 'user', m.content, false, m.created);
+    chatHistory.push({role: m.role, content: m.content});
+  }
+  document.getElementById('chat-input').focus();
+}
+
+async function deleteConversation(e, convId) {
+  e.stopPropagation();
+  if (!confirm('Delete this conversation?')) return;
+  await fetch(`/willie/conversations/${convId}`, {method:'DELETE'});
+  document.getElementById(`conv-${convId}`)?.remove();
+  if (currentConvId === convId) { currentConvId = null; chatHistory = []; clearMessages(); }
+  if (!document.querySelector('.conv-item')) {
+    document.getElementById('conv-list').innerHTML =
+      '<div class="sidebar-empty">No conversations yet.<br>Start chatting with Willie!</div>';
+  }
+}
+
+function clearMessages() {
+  document.getElementById('chat-messages').innerHTML = `
+    <div class="willie-welcome" id="welcome">
+      <div class="welcome-wave">🌊</div>
+      <div class="welcome-title">Hey, I'm Willie</div>
+      <div class="welcome-sub">Your flood damage expert. Ask me anything.</div>
+      <div class="quick-prompts">
+        <button class="qp" onclick="quickSend('What should I do first after a flood?')">🚨 First steps after a flood</button>
+        <button class="qp" onclick="quickSend('How do I document flood damage properly?')">📸 Document damage</button>
+        <button class="qp" onclick="quickSend('What are the claim statuses and what does each mean?')">📋 Claim statuses</button>
+        <button class="qp" onclick="quickSend('How do I create a new claim?')">➕ Create a claim</button>
+      </div>
+    </div>`;
+}
+
+function refreshSidebar(convId, title) {
+  const list = document.getElementById('conv-list');
+  const empty = list.querySelector('.sidebar-empty');
+  if (empty) empty.remove();
+  document.querySelectorAll('.conv-item').forEach(e => e.classList.remove('active'));
+  const div = document.createElement('div');
+  div.className = 'conv-item active';
+  div.id = `conv-${convId}`;
+  div.onclick = () => loadConversation(convId);
+  div.innerHTML = `
+    <div class="conv-info">
+      <div class="conv-title">${esc(title)}</div>
+      <div class="conv-date">Today</div>
+    </div>
+    <button class="conv-del" title="Delete" onclick="deleteConversation(event,${convId})">✕</button>`;
+  list.prepend(div);
+}
+
+// ── Send ──────────────────────────────────────────────────────────────────
+async function sendMessage() {
+  if (isThinking) return;
+  const input = document.getElementById('chat-input');
+  const text  = input.value.trim();
+  if (!text) return;
+  input.value = ''; input.style.height = 'auto';
+  isThinking = true;
+  document.getElementById('send-btn').disabled = true;
+
+  // Create conversation if none
+  if (!currentConvId) {
+    const r = await fetch('/willie/conversations', {method:'POST'});
+    const c = await r.json();
+    currentConvId = c.id;
+    refreshSidebar(c.id, c.title);
+  }
+
+  addMessage('user', text);
+  chatHistory.push({role:'user', content:text});
+  const typing = addMessage('willie', '', true);
+
+  try {
+    const res = await fetch('/willie/chat', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        message:         text,
+        history:         chatHistory.slice(-12),
+        conversation_id: currentConvId,
+        session_id:      SESSION_ID
+      })
+    });
+    const data = await res.json();
+    typing.remove();
+    const reply = data.reply || '⚠️ Something went wrong.';
+    addMessage('willie', reply);
+    chatHistory.push({role:'assistant', content:reply});
+
+    // Update sidebar title
+    if (chatHistory.length === 2) {
+      const titleEl = document.querySelector(`#conv-${currentConvId} .conv-title`);
+      if (titleEl) titleEl.textContent = text.slice(0,50) + (text.length>50?'...':'');
+    }
+  } catch(e) {
+    typing.remove();
+    addMessage('willie', '⚠️ Could not reach Willie. Check your connection.');
+  }
+
+  isThinking = false;
+  document.getElementById('send-btn').disabled = false;
+  document.getElementById('chat-input').focus();
+}
+
+window.onload = () => document.getElementById('chat-input').focus();
+</script>
+{% endblock %}

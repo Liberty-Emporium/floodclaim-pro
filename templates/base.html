@@ -125,6 +125,8 @@
     <div class="nav-section">Main</div>
     <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}">📊 Dashboard</a>
     <a href="{{ url_for('new_claim') }}" class="nav-link {% if request.endpoint=='new_claim' %}active{% endif %}">➕ New Claim</a>
+    <div class="nav-section">Assistant</div>
+    <a href="{{ url_for('willie') }}" class="nav-link {% if request.endpoint=='willie' %}active{% endif %}" style="color:var(--cyan)">🌊 Chat with Willie</a>
     {% if session.role == 'admin' %}
     <div class="nav-section">Admin</div>
     <a href="{{ url_for('team') }}" class="nav-link {% if request.endpoint=='team' %}active{% endif %}">👥 Team</a>
