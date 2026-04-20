@@ -1071,6 +1071,92 @@ def willie_dashboard():
     ''').fetchall()
     return jsonify({'ok': True, 'stats': stats, 'recent_claims': [dict(r) for r in recent]})
 
+@app.route('/willie/api/claims/<int:claim_id>/rooms', methods=['GET'])
+def willie_list_rooms(claim_id):
+    if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
+    db = get_db()
+    rooms = db.execute('SELECT id, room_name, notes FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    items = db.execute('SELECT id, room_id, description, quantity, unit, unit_cost, total_cost FROM line_items WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    rooms_out = []
+    for r in rooms:
+        room_items = [dict(i) for i in items if i['room_id'] == r['id']]
+        rooms_out.append({'id': r['id'], 'room_name': r['room_name'], 'notes': r['notes'], 'line_items': room_items})
+    return jsonify({'ok': True, 'claim_id': claim_id, 'rooms': rooms_out})
+
+
+@app.route('/willie/api/claims/<int:claim_id>/rooms/<int:room_id>', methods=['DELETE'])
+def willie_delete_room(claim_id, room_id):
+    if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
+    db = get_db()
+    room = db.execute('SELECT id, room_name FROM rooms WHERE id=? AND claim_id=?', (room_id, claim_id)).fetchone()
+    if not room: return jsonify({'error': 'Room not found'}), 404
+    db.execute('DELETE FROM rooms WHERE id=?', (room_id,))
+    db.commit()
+    return jsonify({'ok': True, 'message': f'Room "{room["room_name"]}" and all its line items deleted.'})
+
+
+@app.route('/willie/api/line-items/<int:item_id>', methods=['DELETE'])
+def willie_delete_line_item(item_id):
+    if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
+    db = get_db()
+    item = db.execute('SELECT id, description FROM line_items WHERE id=?', (item_id,)).fetchone()
+    if not item: return jsonify({'error': 'Line item not found'}), 404
+    db.execute('DELETE FROM line_items WHERE id=?', (item_id,))
+    db.commit()
+    return jsonify({'ok': True, 'message': f'Line item "{item["description"]}" deleted.'})
+
+
+@app.route('/willie/api/team/<int:user_id>', methods=['DELETE'])
+def willie_delete_team_member(user_id):
+    if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
+    db = get_db()
+    user = db.execute('SELECT id, name FROM users WHERE id=?', (user_id,)).fetchone()
+    if not user: return jsonify({'error': 'Team member not found'}), 404
+    db.execute('DELETE FROM users WHERE id=?', (user_id,))
+    db.commit()
+    return jsonify({'ok': True, 'message': f'Team member "{user["name"]}" deleted.'})
+
+
+@app.route('/willie/api/claims/<int:claim_id>/report', methods=['GET'])
+def willie_get_report(claim_id):
+    if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
+    db = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim: return jsonify({'error': 'Claim not found'}), 404
+    rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    report = dict(claim)
+    report['rooms'] = []
+    for r in rooms:
+        items = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (r['id'],)).fetchall()
+        room_data = dict(r)
+        room_data['line_items'] = [dict(i) for i in items]
+        report['rooms'].append(room_data)
+    return jsonify({'ok': True, 'report': report})
+
+
+@app.route('/willie/api/settings', methods=['GET'])
+def willie_get_settings():
+    if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
+    db = get_db()
+    settings = db.execute('SELECT key, value FROM settings').fetchall()
+    return jsonify({'ok': True, 'settings': {s['key']: s['value'] for s in settings}})
+
+
+@app.route('/willie/api/settings', methods=['POST'])
+def willie_update_settings():
+    if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
+    data = request.get_json(silent=True) or {}
+    db = get_db()
+    allowed = {'openrouter_api_key', 'openrouter_model'}
+    updated = []
+    for key, value in data.items():
+        if key in allowed:
+            db.execute('INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', (key, value))
+            updated.append(key)
+    db.commit()
+    return jsonify({'ok': True, 'updated': updated})
+
+
 @app.route('/health')
 def health():
     return jsonify({'status': 'ok'})
