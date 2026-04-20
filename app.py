@@ -1,4 +1,5 @@
 import os, sqlite3, secrets, hashlib, json, datetime, pathlib, base64
+from datetime import timedelta
 from functools import wraps
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify, g, send_from_directory)
@@ -7,6 +8,10 @@ import requests as _req
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+app.config['SESSION_COOKIE_SECURE']   = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 DATA_DIR    = os.environ.get('RAILWAY_VOLUME_MOUNT_PATH', '/data')
 DB_PATH     = os.path.join(DATA_DIR, 'floodclaim.db')
@@ -225,6 +230,7 @@ def login():
         if not user or not check_pw(pw, user['password']):
             flash('Invalid email or password.', 'error')
             return render_template('login.html')
+        session.permanent = True
         session['user_id'] = user['id']
         session['email']   = user['email']
         session['name']    = user['name']
