@@ -92,6 +92,10 @@ def init_db():
             ai_description TEXT DEFAULT '',
             created_at  TEXT DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL DEFAULT ''
+        );
     ''')
     # Seed admin
     cur = db.execute('SELECT id FROM users WHERE email=?', (ADMIN_EMAIL,))
@@ -144,10 +148,30 @@ def recalc_claim(claim_id):
     db.execute('UPDATE claims SET total_estimate=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', (total, claim_id))
     db.commit()
 
+def get_setting(key, default=''):
+    """Read a setting from DB, fall back to default."""
+    try:
+        db = sqlite3.connect(DB_PATH)
+        db.row_factory = sqlite3.Row
+        row = db.execute('SELECT value FROM settings WHERE key=?', (key,)).fetchone()
+        db.close()
+        return row['value'] if row else default
+    except Exception:
+        return default
+
+def set_setting(key, value):
+    """Upsert a setting into DB."""
+    db = sqlite3.connect(DB_PATH)
+    db.execute('INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+               (key, value))
+    db.commit()
+    db.close()
+
 def ai_describe_photo(image_path):
-    key = OPENROUTER_KEY
+    key = get_setting('openrouter_api_key') or OPENROUTER_KEY
     if not key:
         # Try KYS
+        # (already tried DB + env above)
         try:
             kys_token = os.environ.get('KYS_API_TOKEN', '')
             kys_url   = os.environ.get('KYS_URL', 'https://ai-api-tracker-production.up.railway.app')
@@ -373,6 +397,32 @@ def report(claim_id):
         FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''', (claim_id,)).fetchone()
     return render_template('report.html', claim=claim, room_data=room_data, unassigned_photos=unassigned_photos,
                            generated=datetime.datetime.now().strftime('%B %d, %Y %I:%M %p'))
+
+# ── Admin: Settings ──────────────────────────────────────────────────────────
+
+@app.route('/admin/settings', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def settings():
+    saved = False
+    if request.method == 'POST':
+        openrouter_key = request.form.get('openrouter_api_key', '').strip()
+        if openrouter_key:
+            set_setting('openrouter_api_key', openrouter_key)
+        elif request.form.get('clear_openrouter'):
+            set_setting('openrouter_api_key', '')
+        flash('Settings saved!', 'success')
+        return redirect(url_for('settings'))
+    current_key = get_setting('openrouter_api_key')
+    # Mask key for display
+    masked_key = ''
+    if current_key:
+        masked_key = current_key[:8] + '•' * (len(current_key) - 12) + current_key[-4:] if len(current_key) > 12 else '••••••••'
+    env_key_set = bool(OPENROUTER_KEY)
+    return render_template('settings.html',
+                           masked_key=masked_key,
+                           key_is_set=bool(current_key),
+                           env_key_set=env_key_set)
 
 # ── Admin: Team Management ────────────────────────────────────────────────────
 @app.route('/admin/team')

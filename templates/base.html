@@ -128,6 +128,7 @@
     {% if session.role == 'admin' %}
     <div class="nav-section">Admin</div>
     <a href="{{ url_for('team') }}" class="nav-link {% if request.endpoint=='team' %}active{% endif %}">👥 Team</a>
+    <a href="{{ url_for('settings') }}" class="nav-link {% if request.endpoint=='settings' %}active{% endif %}">⚙️ Settings</a>
     {% endif %}
   </nav>
   <div class="sidebar-footer">

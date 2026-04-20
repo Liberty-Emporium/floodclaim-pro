@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Settings — FloodClaim Pro{% endblock %}
+{% block page_title %}Settings{% endblock %}
+
+{% block extra_css %}
+<style>
+  .settings-section { max-width: 640px; }
+  .key-status {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .3rem .75rem; border-radius: 999px; font-size: .75rem; font-weight: 700;
+  }
+  .key-set   { background: rgba(16,185,129,.12); color: #065f46; }
+  .key-unset { background: rgba(239,68,68,.12);  color: #991b1b; }
+  .key-env   { background: rgba(59,130,246,.12); color: #1e40af; }
+  .masked-key {
+    font-family: monospace; font-size: .85rem;
+    background: var(--gray-100); padding: .5rem .875rem;
+    border-radius: 8px; color: var(--gray-800);
+    border: 1px solid var(--gray-200); letter-spacing: .05em;
+  }
+  .info-box {
+    background: rgba(6,182,212,.07); border: 1px solid rgba(6,182,212,.2);
+    border-radius: 10px; padding: 1rem 1.25rem; font-size: .85rem;
+    color: var(--gray-800); margin-bottom: 1.5rem; line-height: 1.6;
+  }
+  .info-box strong { color: var(--cyan); }
+  .divider { border: none; border-top: 1px solid var(--gray-200); margin: 1.5rem 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="settings-section">
+
+  <!-- AI Integration Card -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">🤖 AI Integration</div>
+      {% if key_is_set %}
+        <span class="key-status key-set">✅ Key Active</span>
+      {% elif env_key_set %}
+        <span class="key-status key-env">🔧 Via Env Var</span>
+      {% else %}
+        <span class="key-status key-unset">⚠️ Not Configured</span>
+      {% endif %}
+    </div>
+
+    <div class="info-box">
+      <strong>OpenRouter</strong> powers the AI photo analysis on every claim.
+      Add your key here and it's stored securely in the database — no need to redeploy.
+      Get a free key at <strong>openrouter.ai</strong>.
+    </div>
+
+    {% if key_is_set %}
+    <!-- Current Key Display -->
+    <div class="form-group">
+      <label>Current Key</label>
+      <div class="masked-key">{{ masked_key }}</div>
+    </div>
+    <hr class="divider">
+    {% endif %}
+
+    <!-- Save / Update Key Form -->
+    <form method="POST">
+      <div class="form-group">
+        <label>{% if key_is_set %}Replace{% else %}Add{% endif %} OpenRouter API Key</label>
+        <input class="form-control" type="password" name="openrouter_api_key"
+               placeholder="sk-or-v1-..." autocomplete="new-password"/>
+        <div style="font-size:.78rem;color:var(--gray-400);margin-top:.35rem;">
+          Paste your key above. It will be stored in the database and used immediately.
+        </div>
+      </div>
+      <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;">
+        <button type="submit" class="btn btn-primary">
+          💾 Save Key
+        </button>
+        {% if key_is_set %}
+        <button type="submit" name="clear_openrouter" value="1"
+                class="btn btn-ghost btn-sm"
+                onclick="return confirm('Remove the saved API key?')">
+          🗑 Remove Key
+        </button>
+        {% endif %}
+      </div>
+    </form>
+
+    {% if env_key_set and not key_is_set %}
+    <div style="margin-top:1rem;font-size:.8rem;color:var(--gray-400);">
+      ℹ️ An <code>OPENROUTER_API_KEY</code> environment variable is set on Railway —
+      that will be used until you save a key here.
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- How It Works -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">📖 How AI Analysis Works</div>
+    </div>
+    <div style="font-size:.875rem;color:var(--gray-600);line-height:1.7;">
+      <p style="margin-bottom:.75rem;">
+        When you upload a damage photo on a claim, FloodClaim Pro sends it to
+        <strong>OpenRouter → GPT-4o Mini</strong> for instant damage assessment.
+      </p>
+      <p style="margin-bottom:.75rem;">
+        The AI describes what it sees — water damage levels, affected materials,
+        likely repair needs — and saves the description right alongside the photo
+        on the claim report.
+      </p>
+      <p>
+        <strong>Key lookup order:</strong>
+        Database (this page) → <code>OPENROUTER_API_KEY</code> env var → KYS vault
+      </p>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
