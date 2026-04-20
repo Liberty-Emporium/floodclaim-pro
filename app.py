@@ -938,6 +938,20 @@ def willie_get_claim(claim_id):
         room_data.append({'room': dict(r), 'items': [dict(i) for i in items]})
     return jsonify({'ok': True, 'claim': dict(claim), 'rooms': room_data})
 
+@app.route('/willie/api/claims/<int:claim_id>', methods=['DELETE'])
+def willie_delete_claim(claim_id):
+    if not willie_auth():
+        return jsonify({'error': 'unauthorized'}), 401
+    db = get_db()
+    claim = db.execute('SELECT id, client_name FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim:
+        return jsonify({'error': 'Claim not found'}), 404
+    # CASCADE deletes rooms, line_items, photos automatically
+    db.execute('DELETE FROM claims WHERE id=?', (claim_id,))
+    db.commit()
+    return jsonify({'ok': True, 'message': f'Claim {claim_id} ({claim["client_name"]}) and all records deleted.'})
+
+
 @app.route('/willie/api/claims/<int:claim_id>/status', methods=['POST'])
 def willie_update_status(claim_id):
     if not willie_auth():
