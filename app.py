@@ -439,6 +439,40 @@ def upload_photo(claim_id):
 def uploaded_file(filename):
     return send_from_directory(UPLOAD_DIR, filename)
 
+@app.route('/photos/<int:photo_id>/delete', methods=['POST'])
+@login_required
+def delete_photo(photo_id):
+    db    = get_db()
+    photo = db.execute('SELECT * FROM photos WHERE id=?', (photo_id,)).fetchone()
+    if not photo:
+        return jsonify({'ok': False, 'error': 'Not found'}), 404
+    # Delete the file from disk
+    try:
+        file_path = os.path.join(UPLOAD_DIR, photo['filename'])
+        if os.path.exists(file_path):
+            os.remove(file_path)
+    except Exception:
+        pass
+    db.execute('DELETE FROM photos WHERE id=?', (photo_id,))
+    db.commit()
+    return jsonify({'ok': True})
+
+@app.route('/photos/<int:photo_id>/edit', methods=['POST'])
+@login_required
+def edit_photo(photo_id):
+    db      = get_db()
+    photo   = db.execute('SELECT * FROM photos WHERE id=?', (photo_id,)).fetchone()
+    if not photo:
+        flash('Photo not found.', 'error')
+        return redirect(url_for('dashboard'))
+    caption = request.form.get('caption', '').strip()
+    room_id = request.form.get('room_id') or None
+    db.execute('UPDATE photos SET caption=?, room_id=? WHERE id=?',
+               (caption, room_id, photo_id))
+    db.commit()
+    flash('Photo updated!', 'success')
+    return redirect(url_for('claim_detail', claim_id=photo['claim_id']))
+
 @app.route('/claims/<int:claim_id>/report')
 @login_required
 def report(claim_id):
