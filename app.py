@@ -14,7 +14,7 @@ UPLOAD_DIR  = os.path.join(DATA_DIR, 'uploads')
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-ADMIN_EMAIL    = os.environ.get('ADMIN_EMAIL', 'admin@floodclaimipro.com')
+ADMIN_EMAIL    = os.environ.get('ADMIN_EMAIL', 'admin@floodclaimpro.com')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin1234')
 OPENROUTER_KEY = os.environ.get('OPENROUTER_API_KEY', '')
 
