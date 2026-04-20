@@ -860,6 +860,53 @@ def willie_add_item(claim_id, room_id):
     return jsonify({'ok': True, 'description': desc, 'total': total,
                     'message': f'Added "{desc}" — {qty} {unit} @ ${unit_cost} = ${total:.2f}'})
 
+@app.route('/willie/api/team', methods=['GET'])
+def willie_list_team():
+    if not willie_auth():
+        return jsonify({'error': 'unauthorized'}), 401
+    db    = get_db()
+    users = db.execute(
+        'SELECT id, name, email, role, created_at, '
+        '(SELECT COUNT(*) FROM claims WHERE adjuster_id=users.id) as claim_count '
+        'FROM users ORDER BY name'
+    ).fetchall()
+    return jsonify({'ok': True, 'team': [dict(u) for u in users], 'count': len(users)})
+
+@app.route('/willie/api/team', methods=['POST'])
+def willie_add_team_member():
+    if not willie_auth():
+        return jsonify({'error': 'unauthorized'}), 401
+    data  = request.get_json(silent=True) or {}
+    name  = data.get('name', '').strip()
+    email = data.get('email', '').strip().lower()
+    pw    = data.get('password', '').strip()
+    role  = data.get('role', 'adjuster').strip().lower()
+    if role not in ('admin', 'adjuster'):
+        role = 'adjuster'
+    if not name:
+        return jsonify({'error': 'name is required'}), 400
+    if not email:
+        return jsonify({'error': 'email is required'}), 400
+    if not pw:
+        pw = secrets.token_urlsafe(10)
+    db = get_db()
+    try:
+        db.execute('INSERT INTO users (name, email, password, role) VALUES (?,?,?,?)',
+                   (name, email, hash_pw(pw), role))
+        db.commit()
+        user = db.execute('SELECT id, name, email, role FROM users WHERE email=?', (email,)).fetchone()
+        return jsonify({
+            'ok': True,
+            'user_id':  user['id'],
+            'name':     user['name'],
+            'email':    user['email'],
+            'role':     user['role'],
+            'password': pw,
+            'message':  f'Team member {name} added as {role}. Login: {email} / {pw}'
+        }), 201
+    except sqlite3.IntegrityError:
+        return jsonify({'error': f'Email {email} already exists'}), 409
+
 @app.route('/willie/api/dashboard', methods=['GET'])
 def willie_dashboard():
     if not willie_auth():
