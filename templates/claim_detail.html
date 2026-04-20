@@ -1,0 +1,198 @@
+{% extends 'base.html' %}
+{% block title %}{{ claim.claim_number }} — FloodClaim Pro{% endblock %}
+{% block page_title %}🏠 Claim {{ claim.claim_number }}{% endblock %}
+{% block content %}
+
+<!-- Header bar -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem">
+  <div>
+    <div style="font-size:1.3rem;font-weight:800;color:#0a1628">{{ claim.client_name }}</div>
+    <div style="font-size:.9rem;color:#64748b;margin-top:.2rem">📍 {{ claim.property_address }}</div>
+  </div>
+  <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center">
+    <form method="POST" action="{{ url_for('update_status', claim_id=claim.id) }}" style="display:flex;gap:.5rem;align-items:center">
+      <select name="status" class="form-control" style="width:auto;padding:.4rem .75rem;font-size:.85rem">
+        {% for s in ['New','In Progress','Submitted','Closed'] %}
+        <option value="{{ s }}" {% if claim.status==s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-ghost btn-sm">Update</button>
+    </form>
+    <a href="{{ url_for('report', claim_id=claim.id) }}" class="btn btn-cyan btn-sm" target="_blank">📄 Report</a>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-sm">← Back</a>
+  </div>
+</div>
+
+<!-- Info cards -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem">
+  <div class="card" style="margin:0;padding:1rem">
+    <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.06em;margin-bottom:.5rem">Flood Date</div>
+    <div style="font-weight:700">{{ claim.flood_date }}</div>
+  </div>
+  <div class="card" style="margin:0;padding:1rem">
+    <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.06em;margin-bottom:.5rem">Insurance</div>
+    <div style="font-weight:700">{{ claim.insurance_company or '—' }}</div>
+    <div style="font-size:.8rem;color:#64748b">{{ claim.policy_number or '' }}</div>
+  </div>
+  <div class="card" style="margin:0;padding:1rem">
+    <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.06em;margin-bottom:.5rem">Adjuster</div>
+    <div style="font-weight:700">{{ claim.adjuster_name or '—' }}</div>
+  </div>
+  <div class="card" style="margin:0;padding:1rem;border:2px solid #10b981">
+    <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;color:#10b981;letter-spacing:.06em;margin-bottom:.5rem">Total Estimate</div>
+    <div style="font-size:1.5rem;font-weight:800;color:#10b981">${{ "{:,.2f}".format(claim.total_estimate) }}</div>
+  </div>
+</div>
+
+<!-- Photo Upload -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">📸 Upload Damage Photo</div>
+  </div>
+  <form method="POST" action="{{ url_for('upload_photo', claim_id=claim.id) }}" enctype="multipart/form-data">
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:1rem;align-items:end">
+      <div class="form-group" style="margin:0">
+        <label>Photo</label>
+        <input class="form-control" type="file" name="photo" accept="image/*" required/>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Assign to Room (optional)</label>
+        <select class="form-control" name="room_id">
+          <option value="">-- Unassigned --</option>
+          {% for rd in room_data %}
+          <option value="{{ rd.room.id }}">{{ rd.room.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary" style="margin-bottom:0">🤖 Upload + AI Analyze</button>
+    </div>
+    <div class="form-group" style="margin-top:1rem;margin-bottom:0">
+      <label>Caption (optional)</label>
+      <input class="form-control" type="text" name="caption" placeholder="e.g. Living room east wall"/>
+    </div>
+  </form>
+  {% if unassigned_photos %}
+  <div style="margin-top:1.25rem">
+    <div style="font-size:.8rem;font-weight:600;color:#64748b;margin-bottom:.5rem">Unassigned Photos</div>
+    <div class="photo-grid">
+      {% for photo in unassigned_photos %}
+      <div class="photo-card">
+        <img src="{{ url_for('uploaded_file', filename=photo.filename) }}" alt="{{ photo.caption }}"/>
+        <div class="photo-card-body">
+          {% if photo.caption %}<div style="font-weight:600;font-size:.8rem;margin-bottom:.3rem">{{ photo.caption }}</div>{% endif %}
+          {% if photo.ai_description %}<div class="ai-tag">🤖 AI Analysis</div><p>{{ photo.ai_description }}</p>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Rooms & Damage -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">🛠️ Room-by-Room Damage</div>
+    <form method="POST" action="{{ url_for('add_room', claim_id=claim.id) }}" style="display:flex;gap:.5rem">
+      <input class="form-control" type="text" name="room_name" placeholder="e.g. Living Room" style="width:180px"/>
+      <button type="submit" class="btn btn-success btn-sm">+ Add Room</button>
+    </form>
+  </div>
+
+  {% for rd in room_data %}
+  <div class="room-block">
+    <div class="room-header" onclick="toggleRoom('room-{{rd.room.id}}')">
+      <span>🏠 {{ rd.room.name }}</span>
+      <span style="color:#10b981;font-size:.95rem">${{ "{:,.2f}".format(rd.room.subtotal) }} <span style="color:#94a3b8;font-size:.75rem;font-weight:400">▾</span></span>
+    </div>
+    <div class="room-body" id="room-{{rd.room.id}}">
+      <!-- Photos for this room -->
+      {% if rd.photos %}
+      <div class="photo-grid" style="margin-top:0;margin-bottom:1rem">
+        {% for photo in rd.photos %}
+        <div class="photo-card">
+          <img src="{{ url_for('uploaded_file', filename=photo.filename) }}" alt="{{ photo.caption }}"/>
+          <div class="photo-card-body">
+            {% if photo.caption %}<div style="font-weight:600;font-size:.8rem;margin-bottom:.3rem">{{ photo.caption }}</div>{% endif %}
+            {% if photo.ai_description %}<div class="ai-tag">🤖 AI Analysis</div><p>{{ photo.ai_description }}</p>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Line items table -->
+      {% if rd.items %}
+      <table class="table" style="margin-bottom:1rem">
+        <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Total</th><th></th></tr></thead>
+        <tbody>
+        {% for item in rd.items %}
+        <tr>
+          <td>{{ item.description }}</td>
+          <td>{{ item.quantity }}</td>
+          <td>{{ item.unit }}</td>
+          <td>${{ "{:,.2f}".format(item.unit_cost) }}</td>
+          <td style="font-weight:700">${{ "{:,.2f}".format(item.total) }}</td>
+          <td><button onclick="deleteItem({{ item.id }}, this)" class="btn btn-danger btn-sm">✕</button></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      <!-- Add line item -->
+      <form method="POST" action="{{ url_for('add_item', room_id=rd.room.id) }}">
+        <div style="display:grid;grid-template-columns:3fr 1fr 1fr 1fr auto;gap:.5rem;align-items:end">
+          <div class="form-group" style="margin:0">
+            <label style="font-size:.7rem">Description</label>
+            <input class="form-control" type="text" name="description" placeholder="e.g. Drywall replacement" required/>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label style="font-size:.7rem">Qty</label>
+            <input class="form-control" type="number" name="quantity" value="1" step="0.5" min="0"/>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label style="font-size:.7rem">Unit</label>
+            <select class="form-control" name="unit">
+              <option>sq ft</option><option>ln ft</option><option>ea</option><option>hr</option><option>lot</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label style="font-size:.7rem">Unit Cost $</label>
+            <input class="form-control" type="number" name="unit_cost" value="0" step="0.01" min="0"/>
+          </div>
+          <button type="submit" class="btn btn-amber btn-sm">+ Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+
+  {% if not room_data %}
+  <div style="text-align:center;padding:2rem;color:#94a3b8">
+    Add a room above to start logging damage items.
+  </div>
+  {% endif %}
+</div>
+
+{% if claim.notes %}
+<div class="card">
+  <div class="card-title" style="margin-bottom:.75rem">📝 Notes</div>
+  <p style="color:#475569;font-size:.9rem;line-height:1.7">{{ claim.notes }}</p>
+</div>
+{% endif %}
+
+{% endblock %}
+{% block extra_js %}
+<script>
+function toggleRoom(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+async function deleteItem(id, btn) {
+  if (!confirm('Delete this line item?')) return;
+  const r = await fetch('/items/' + id + '/delete', {method:'POST'});
+  if (r.ok) { btn.closest('tr').remove(); location.reload(); }
+}
+</script>
+{% endblock %}

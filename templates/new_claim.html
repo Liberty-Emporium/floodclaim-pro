@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+{% block title %}New Claim — FloodClaim Pro{% endblock %}
+{% block page_title %}➕ New Claim{% endblock %}
+{% block content %}
+<div class="card" style="max-width:800px">
+  <div class="card-header">
+    <div class="card-title">🌊 Create New Flood Claim</div>
+  </div>
+  <form method="POST">
+    <div style="margin-bottom:1.5rem">
+      <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#06b6d4;margin-bottom:1rem">Client Information</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Client Name *</label>
+          <input class="form-control" type="text" name="client_name" placeholder="John Smith" required/>
+        </div>
+        <div class="form-group">
+          <label>Client Phone</label>
+          <input class="form-control" type="tel" name="client_phone" placeholder="(555) 000-0000"/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Client Email</label>
+        <input class="form-control" type="email" name="client_email" placeholder="client@example.com"/>
+      </div>
+    </div>
+
+    <div style="margin-bottom:1.5rem">
+      <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#06b6d4;margin-bottom:1rem">Property & Flood Details</div>
+      <div class="form-group">
+        <label>Property Address *</label>
+        <input class="form-control" type="text" name="property_address" placeholder="123 Main St, City, State 12345" required/>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Flood Date *</label>
+          <input class="form-control" type="date" name="flood_date" required/>
+        </div>
+        {% if session.role == 'admin' and adjusters %}
+        <div class="form-group">
+          <label>Assign Adjuster</label>
+          <select class="form-control" name="adjuster_id">
+            {% for a in adjusters %}
+            <option value="{{ a.id }}" {% if a.id == session.user_id %}selected{% endif %}>{{ a.name or a.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div style="margin-bottom:1.5rem">
+      <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#06b6d4;margin-bottom:1rem">Insurance Details</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Insurance Company</label>
+          <input class="form-control" type="text" name="insurance_company" placeholder="State Farm, FEMA, etc."/>
+        </div>
+        <div class="form-group">
+          <label>Policy Number</label>
+          <input class="form-control" type="text" name="policy_number" placeholder="POL-000000"/>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Initial Notes</label>
+      <textarea class="form-control" name="notes" rows="3" placeholder="Initial observations, access instructions, special circumstances..."></textarea>
+    </div>
+
+    <div style="display:flex;gap:1rem;margin-top:1.5rem">
+      <button type="submit" class="btn btn-primary">Create Claim →</button>
+      <a href="{{ url_for('dashboard') }}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

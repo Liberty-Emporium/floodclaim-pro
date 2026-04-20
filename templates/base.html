@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>{% block title %}FloodClaim Pro{% endblock %}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --navy:#0a1628;--navy2:#0f2040;--blue:#1e40af;--blue-light:#3b82f6;
+      --cyan:#06b6d4;--green:#10b981;--amber:#f59e0b;--red:#ef4444;
+      --white:#fff;--gray-50:#f8fafc;--gray-100:#f1f5f9;--gray-200:#e2e8f0;
+      --gray-400:#94a3b8;--gray-600:#475569;--gray-800:#1e293b;
+      --sidebar-w:240px;
+    }
+    html{scroll-behavior:smooth}
+    body{font-family:'Inter',sans-serif;background:var(--gray-50);color:var(--gray-800);display:flex;min-height:100vh}
+
+    /* sidebar */
+    .sidebar{width:var(--sidebar-w);background:var(--navy);min-height:100vh;position:fixed;top:0;left:0;display:flex;flex-direction:column;z-index:50}
+    .sidebar-logo{padding:1.5rem 1.25rem 1rem;border-bottom:1px solid rgba(255,255,255,.08)}
+    .sidebar-logo h1{font-size:1.1rem;font-weight:800;color:#fff;letter-spacing:-.02em}
+    .sidebar-logo h1 span{color:var(--cyan)}
+    .sidebar-logo p{font-size:.7rem;color:var(--gray-400);margin-top:.15rem}
+    .nav-section{padding:.75rem 1.25rem .25rem;font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--gray-400)}
+    .nav-link{display:flex;align-items:center;gap:.625rem;padding:.6rem 1.25rem;color:var(--gray-400);text-decoration:none;font-size:.875rem;font-weight:500;transition:all .15s;border-right:2px solid transparent}
+    .nav-link:hover{color:#fff;background:rgba(255,255,255,.05)}
+    .nav-link.active{color:#fff;background:rgba(59,130,246,.15);border-right-color:var(--blue-light)}
+    .sidebar-footer{margin-top:auto;padding:1rem 1.25rem;border-top:1px solid rgba(255,255,255,.08);font-size:.8rem;color:var(--gray-400)}
+    .sidebar-footer a{color:var(--gray-400);text-decoration:none}
+    .sidebar-footer a:hover{color:#fff}
+
+    /* main */
+    .main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column}
+    .topbar{background:#fff;border-bottom:1px solid var(--gray-200);padding:.75rem 2rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40}
+    .topbar-title{font-size:1.1rem;font-weight:700;color:var(--gray-800)}
+    .topbar-right{display:flex;align-items:center;gap:1rem}
+    .user-badge{font-size:.8rem;color:var(--gray-600);font-weight:500}
+    .role-badge{font-size:.7rem;font-weight:700;padding:.2rem .5rem;border-radius:999px;text-transform:uppercase;letter-spacing:.05em}
+    .role-admin{background:rgba(59,130,246,.1);color:var(--blue)}
+    .role-adjuster{background:rgba(16,185,129,.1);color:var(--green)}
+    .content{padding:2rem;flex:1}
+
+    /* cards */
+    .card{background:#fff;border-radius:12px;border:1px solid var(--gray-200);padding:1.5rem;margin-bottom:1.5rem}
+    .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem}
+    .card-title{font-size:1rem;font-weight:700;color:var(--gray-800)}
+
+    /* stat tiles */
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem}
+    .stat-tile{background:#fff;border-radius:12px;border:1px solid var(--gray-200);padding:1.25rem}
+    .stat-tile .val{font-size:1.75rem;font-weight:800;color:var(--navy);line-height:1}
+    .stat-tile .lbl{font-size:.75rem;color:var(--gray-400);font-weight:500;margin-top:.25rem;text-transform:uppercase;letter-spacing:.05em}
+    .stat-tile.accent-blue .val{color:var(--blue)}
+    .stat-tile.accent-green .val{color:var(--green)}
+    .stat-tile.accent-amber .val{color:var(--amber)}
+    .stat-tile.accent-cyan .val{color:var(--cyan)}
+
+    /* buttons */
+    .btn{display:inline-flex;align-items:center;gap:.4rem;padding:.55rem 1.1rem;border-radius:8px;font-size:.875rem;font-weight:600;cursor:pointer;text-decoration:none;border:none;transition:all .15s;font-family:inherit}
+    .btn-primary{background:var(--blue);color:#fff}.btn-primary:hover{background:#1d35a8}
+    .btn-success{background:var(--green);color:#fff}.btn-success:hover{background:#059669}
+    .btn-amber{background:var(--amber);color:var(--navy)}.btn-amber:hover{background:#d97706}
+    .btn-danger{background:var(--red);color:#fff}.btn-danger:hover{background:#dc2626}
+    .btn-ghost{background:transparent;color:var(--gray-600);border:1px solid var(--gray-200)}.btn-ghost:hover{background:var(--gray-50);color:var(--gray-800)}
+    .btn-sm{padding:.35rem .75rem;font-size:.8rem}
+    .btn-cyan{background:var(--cyan);color:#fff}.btn-cyan:hover{background:#0891b2}
+
+    /* forms */
+    .form-group{margin-bottom:1rem}
+    .form-group label{display:block;font-size:.8rem;font-weight:600;color:var(--gray-600);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.04em}
+    .form-control{width:100%;padding:.65rem .875rem;border:1.5px solid var(--gray-200);border-radius:8px;font-family:inherit;font-size:.9rem;color:var(--gray-800);outline:none;transition:border-color .2s}
+    .form-control:focus{border-color:var(--blue-light)}
+    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+    .form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem}
+
+    /* table */
+    .table{width:100%;border-collapse:collapse;font-size:.875rem}
+    .table th{text-align:left;padding:.6rem .875rem;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--gray-400);border-bottom:1px solid var(--gray-200)}
+    .table td{padding:.75rem .875rem;border-bottom:1px solid var(--gray-100);vertical-align:middle}
+    .table tr:hover td{background:var(--gray-50)}
+
+    /* badges */
+    .badge{display:inline-block;padding:.2rem .6rem;border-radius:999px;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+    .badge-new{background:rgba(6,182,212,.1);color:var(--cyan)}
+    .badge-progress{background:rgba(245,158,11,.1);color:var(--amber)}
+    .badge-submitted{background:rgba(59,130,246,.1);color:var(--blue)}
+    .badge-closed{background:rgba(16,185,129,.1);color:var(--green)}
+
+    /* alerts */
+    .alert{padding:.875rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:.875rem;font-weight:500}
+    .alert-success{background:rgba(16,185,129,.1);color:#065f46;border:1px solid rgba(16,185,129,.2)}
+    .alert-error{background:rgba(239,68,68,.1);color:#991b1b;border:1px solid rgba(239,68,68,.2)}
+
+    /* photo grid */
+    .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:1rem;margin-top:1rem}
+    .photo-card{border-radius:8px;overflow:hidden;border:1px solid var(--gray-200);background:#fff}
+    .photo-card img{width:100%;height:120px;object-fit:cover;display:block}
+    .photo-card-body{padding:.5rem .75rem}
+    .photo-card-body p{font-size:.75rem;color:var(--gray-600);line-height:1.4}
+    .photo-card-body .ai-tag{font-size:.65rem;color:var(--blue);font-weight:600;margin-bottom:.2rem}
+
+    /* rooms */
+    .room-block{border:1px solid var(--gray-200);border-radius:10px;margin-bottom:1rem;overflow:hidden}
+    .room-header{background:var(--gray-50);padding:.75rem 1.25rem;display:flex;align-items:center;justify-content:space-between;font-weight:700;font-size:.9rem;cursor:pointer}
+    .room-body{padding:1.25rem}
+
+    @media(max-width:768px){
+      .sidebar{transform:translateX(-100%)}
+      .main{margin-left:0}
+      .form-row,.form-row-3{grid-template-columns:1fr}
+    }
+  </style>
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+{% if session.user_id %}
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <h1>Flood<span>Claim</span> Pro</h1>
+    <p>Damage Assessment Platform</p>
+  </div>
+  <nav style="flex:1;padding:.75rem 0">
+    <div class="nav-section">Main</div>
+    <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}">📊 Dashboard</a>
+    <a href="{{ url_for('new_claim') }}" class="nav-link {% if request.endpoint=='new_claim' %}active{% endif %}">➕ New Claim</a>
+    {% if session.role == 'admin' %}
+    <div class="nav-section">Admin</div>
+    <a href="{{ url_for('team') }}" class="nav-link {% if request.endpoint=='team' %}active{% endif %}">👥 Team</a>
+    {% endif %}
+  </nav>
+  <div class="sidebar-footer">
+    <div style="font-weight:600;color:#fff;margin-bottom:.2rem">{{ session.name or session.email }}</div>
+    <div style="margin-bottom:.5rem">
+      <span class="role-badge {% if session.role=='admin' %}role-admin{% else %}role-adjuster{% endif %}">{{ session.role }}</span>
+    </div>
+    <a href="{{ url_for('logout') }}">🚪 Log Out</a>
+  </div>
+</aside>
+{% endif %}
+
+<main class="main">
+  {% if session.user_id %}
+  <div class="topbar">
+    <div class="topbar-title">{% block page_title %}{% endblock %}</div>
+    <div class="topbar-right">
+      <span class="user-badge">{{ session.email }}</span>
+    </div>
+  </div>
+  {% endif %}
+  <div class="content">
+    {% for cat in ['success','error','info'] %}
+      {% for msg in get_flashed_messages(category_filter=[cat]) %}
+        <div class="alert alert-{{ cat }}">{{ msg }}</div>
+      {% endfor %}
+    {% endfor %}
+    {% block content %}{% endblock %}
+  </div>
+</main>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

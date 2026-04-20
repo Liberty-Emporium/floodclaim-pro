@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard — FloodClaim Pro{% endblock %}
+{% block page_title %}📊 Dashboard{% endblock %}
+{% block content %}
+
+<div class="stats-grid">
+  <div class="stat-tile">
+    <div class="val">{{ stats.total }}</div>
+    <div class="lbl">Total Claims</div>
+  </div>
+  <div class="stat-tile accent-cyan">
+    <div class="val">{{ stats.new }}</div>
+    <div class="lbl">New</div>
+  </div>
+  <div class="stat-tile accent-amber">
+    <div class="val">{{ stats.in_progress }}</div>
+    <div class="lbl">In Progress</div>
+  </div>
+  <div class="stat-tile accent-blue">
+    <div class="val">{{ stats.submitted }}</div>
+    <div class="lbl">Submitted</div>
+  </div>
+  <div class="stat-tile accent-green">
+    <div class="val">{{ stats.closed }}</div>
+    <div class="lbl">Closed</div>
+  </div>
+  <div class="stat-tile accent-green">
+    <div class="val">${{ "{:,.0f}".format(stats.pipeline) }}</div>
+    <div class="lbl">Pipeline Value</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">All Claims</div>
+    <a href="{{ url_for('new_claim') }}" class="btn btn-primary btn-sm">➕ New Claim</a>
+  </div>
+  {% if claims %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Claim #</th>
+        <th>Client</th>
+        <th>Address</th>
+        <th>Adjuster</th>
+        <th>Flood Date</th>
+        <th>Estimate</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for c in claims %}
+    <tr>
+      <td><span style="font-family:monospace;font-size:.8rem;font-weight:700;color:#1e40af">{{ c.claim_number }}</span></td>
+      <td><div style="font-weight:600">{{ c.client_name }}</div><div style="font-size:.75rem;color:#94a3b8">{{ c.client_phone }}</div></td>
+      <td style="font-size:.85rem">{{ c.property_address }}</td>
+      <td style="font-size:.85rem">{{ c.adjuster_name or '—' }}</td>
+      <td style="font-size:.85rem">{{ c.flood_date }}</td>
+      <td style="font-weight:700;color:#10b981">${{ "{:,.2f}".format(c.total_estimate) }}</td>
+      <td>
+        {% if c.status == 'New' %}<span class="badge badge-new">New</span>
+        {% elif c.status == 'In Progress' %}<span class="badge badge-progress">In Progress</span>
+        {% elif c.status == 'Submitted' %}<span class="badge badge-submitted">Submitted</span>
+        {% elif c.status == 'Closed' %}<span class="badge badge-closed">Closed</span>
+        {% else %}<span class="badge">{{ c.status }}</span>{% endif %}
+      </td>
+      <td><a href="{{ url_for('claim_detail', claim_id=c.id) }}" class="btn btn-ghost btn-sm">View →</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="text-align:center;padding:3rem;color:#94a3b8">
+    <div style="font-size:3rem;margin-bottom:1rem">📋</div>
+    <div style="font-weight:600;margin-bottom:.5rem">No claims yet</div>
+    <a href="{{ url_for('new_claim') }}" class="btn btn-primary">Create Your First Claim</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

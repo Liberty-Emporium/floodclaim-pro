@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FloodClaim Pro — Login</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#0a1628 0%,#0f2040 60%,#060d1a 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem}
+.login-box{background:#fff;border-radius:16px;padding:2.5rem;width:100%;max-width:400px;box-shadow:0 25px 60px rgba(0,0,0,.4)}
+.login-logo{text-align:center;margin-bottom:2rem}
+.login-logo h1{font-size:1.6rem;font-weight:800;color:#0a1628}
+.login-logo h1 span{color:#06b6d4}
+.login-logo p{font-size:.85rem;color:#64748b;margin-top:.25rem}
+.form-group{margin-bottom:1rem}
+.form-group label{display:block;font-size:.8rem;font-weight:600;color:#475569;margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.04em}
+.form-control{width:100%;padding:.7rem 1rem;border:1.5px solid #e2e8f0;border-radius:8px;font-family:inherit;font-size:.95rem;outline:none;transition:border-color .2s}
+.form-control:focus{border-color:#3b82f6}
+.btn{width:100%;padding:.8rem;background:#1e40af;color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:700;cursor:pointer;font-family:inherit;transition:background .2s;margin-top:.5rem}
+.btn:hover{background:#1d35a8}
+.alert{padding:.75rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:.875rem;background:rgba(239,68,68,.1);color:#991b1b;border:1px solid rgba(239,68,68,.2)}
+.demo-hint{margin-top:1.5rem;padding:1rem;background:#f8fafc;border-radius:8px;font-size:.8rem;color:#64748b;text-align:center;border:1px solid #e2e8f0}
+.demo-hint strong{color:#1e40af}
+</style>
+</head>
+<body>
+<div class="login-box">
+  <div class="login-logo">
+    <div style="font-size:2.5rem;margin-bottom:.5rem">🌊</div>
+    <h1>Flood<span>Claim</span> Pro</h1>
+    <p>Professional Flood Damage Assessment</p>
+  </div>
+  {% for msg in get_flashed_messages(category_filter=['error']) %}
+    <div class="alert">{{ msg }}</div>
+  {% endfor %}
+  <form method="POST">
+    <div class="form-group">
+      <label>Email Address</label>
+      <input class="form-control" type="email" name="email" placeholder="you@example.com" required autofocus/>
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input class="form-control" type="password" name="password" placeholder="••••••••" required/>
+    </div>
+    <button class="btn" type="submit">Sign In →</button>
+  </form>
+  <div class="demo-hint">
+    <strong>Demo:</strong> admin@floodclaimpro.com / admin1234
+  </div>
+</div>
+</body>
+</html>

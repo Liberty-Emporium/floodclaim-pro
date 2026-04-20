@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Damage Report — {{ claim.claim_number }}</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',sans-serif;background:#fff;color:#1e293b;padding:2rem;max-width:900px;margin:0 auto}
+.report-header{border-bottom:3px solid #0a1628;padding-bottom:1.5rem;margin-bottom:2rem;display:flex;justify-content:space-between;align-items:flex-start}
+.report-logo h1{font-size:1.8rem;font-weight:800;color:#0a1628}
+.report-logo h1 span{color:#06b6d4}
+.report-logo p{font-size:.85rem;color:#64748b;margin-top:.2rem}
+.report-meta{text-align:right;font-size:.8rem;color:#64748b}
+.report-meta strong{color:#1e293b;display:block;font-size:1rem}
+.section{margin-bottom:2rem}
+.section-title{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#06b6d4;margin-bottom:.75rem;border-bottom:1px solid #e2e8f0;padding-bottom:.35rem}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem 2rem}
+.info-row{display:flex;gap:.5rem;font-size:.875rem;padding:.3rem 0}
+.info-row label{font-weight:600;color:#64748b;min-width:140px;flex-shrink:0}
+.room-block{margin-bottom:1.5rem;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden}
+.room-header{background:#f8fafc;padding:.75rem 1rem;font-weight:700;display:flex;justify-content:space-between;font-size:.9rem}
+.room-body{padding:1rem}
+table{width:100%;border-collapse:collapse;font-size:.85rem;margin-bottom:.75rem}
+th{text-align:left;padding:.5rem .75rem;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;border-bottom:1px solid #e2e8f0}
+td{padding:.6rem .75rem;border-bottom:1px solid #f1f5f9}
+.total-row td{font-weight:800;border-top:2px solid #e2e8f0;color:#10b981}
+.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-top:.75rem}
+.photo-card img{width:100%;height:100px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0}
+.photo-caption{font-size:.7rem;color:#64748b;margin-top:.25rem}
+.ai-note{font-size:.72rem;color:#3b82f6;margin-top:.2rem;font-style:italic}
+.grand-total{background:#0a1628;color:#fff;border-radius:10px;padding:1.25rem 1.5rem;display:flex;justify-content:space-between;align-items:center;margin-top:2rem}
+.grand-total .label{font-size:.85rem;opacity:.7}
+.grand-total .amount{font-size:2rem;font-weight:800;color:#10b981}
+.signature-section{display:grid;grid-template-columns:1fr 1fr;gap:3rem;margin-top:3rem;padding-top:2rem;border-top:1px solid #e2e8f0}
+.sig-line{border-bottom:1px solid #1e293b;height:40px;margin-bottom:.5rem}
+.sig-label{font-size:.75rem;color:#64748b}
+.print-btn{position:fixed;bottom:2rem;right:2rem;background:#1e40af;color:#fff;border:none;padding:.75rem 1.5rem;border-radius:8px;font-size:.9rem;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 4px 15px rgba(30,64,175,.4)}
+@media print{.print-btn{display:none}body{padding:1rem}}
+</style>
+</head>
+<body>
+
+<div class="report-header">
+  <div class="report-logo">
+    <h1>Flood<span>Claim</span> Pro</h1>
+    <p>Professional Flood Damage Assessment Report</p>
+  </div>
+  <div class="report-meta">
+    <strong>{{ claim.claim_number }}</strong>
+    Generated: {{ generated }}<br>
+    Status: {{ claim.status }}
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Client & Property Information</div>
+  <div class="info-grid">
+    <div>
+      <div class="info-row"><label>Client Name:</label> {{ claim.client_name }}</div>
+      <div class="info-row"><label>Phone:</label> {{ claim.client_phone or '—' }}</div>
+      <div class="info-row"><label>Email:</label> {{ claim.client_email or '—' }}</div>
+    </div>
+    <div>
+      <div class="info-row"><label>Property Address:</label> {{ claim.property_address }}</div>
+      <div class="info-row"><label>Flood Date:</label> {{ claim.flood_date }}</div>
+      <div class="info-row"><label>Insurance Co.:</label> {{ claim.insurance_company or '—' }}</div>
+      <div class="info-row"><label>Policy Number:</label> {{ claim.policy_number or '—' }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Adjuster Information</div>
+  <div class="info-row"><label>Assigned Adjuster:</label> {{ claim.adjuster_name or '—' }}</div>
+  <div class="info-row"><label>Adjuster Email:</label> {{ claim.adjuster_email or '—' }}</div>
+</div>
+
+<div class="section">
+  <div class="section-title">Damage Assessment by Room</div>
+  {% for rd in room_data %}
+  <div class="room-block">
+    <div class="room-header">
+      <span>{{ rd.room.name }}</span>
+      <span style="color:#10b981">${{ "{:,.2f}".format(rd.room.subtotal) }}</span>
+    </div>
+    <div class="room-body">
+      {% if rd.items %}
+      <table>
+        <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Total</th></tr></thead>
+        <tbody>
+        {% for item in rd.items %}
+        <tr>
+          <td>{{ item.description }}</td>
+          <td>{{ item.quantity }}</td>
+          <td>{{ item.unit }}</td>
+          <td>${{ "{:,.2f}".format(item.unit_cost) }}</td>
+          <td>${{ "{:,.2f}".format(item.total) }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="total-row">
+          <td colspan="4">Room Subtotal</td>
+          <td>${{ "{:,.2f}".format(rd.room.subtotal) }}</td>
+        </tr>
+        </tbody>
+      </table>
+      {% endif %}
+      {% if rd.photos %}
+      <div class="photo-grid">
+        {% for photo in rd.photos %}
+        <div>
+          <img src="{{ request.host_url }}uploads/{{ photo.filename }}" alt="{{ photo.caption }}"/>
+          {% if photo.caption %}<div class="photo-caption">{{ photo.caption }}</div>{% endif %}
+          {% if photo.ai_description %}<div class="ai-note">🤖 {{ photo.ai_description }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="grand-total">
+  <div>
+    <div class="label">Total Estimated Damage</div>
+    <div style="font-size:.85rem;opacity:.6;margin-top:.2rem">All rooms combined</div>
+  </div>
+  <div class="amount">${{ "{:,.2f}".format(claim.total_estimate) }}</div>
+</div>
+
+{% if claim.notes %}
+<div class="section" style="margin-top:2rem">
+  <div class="section-title">Adjuster Notes</div>
+  <p style="font-size:.875rem;line-height:1.7;color:#475569">{{ claim.notes }}</p>
+</div>
+{% endif %}
+
+<div class="signature-section">
+  <div>
+    <div class="sig-line"></div>
+    <div class="sig-label">Adjuster Signature / Date</div>
+  </div>
+  <div>
+    <div class="sig-line"></div>
+    <div class="sig-label">Client Signature / Date</div>
+  </div>
+</div>
+
+<button class="print-btn" onclick="window.print()">🖨️ Print / Save PDF</button>
+</body>
+</html>

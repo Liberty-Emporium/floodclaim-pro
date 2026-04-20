@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}Team — FloodClaim Pro{% endblock %}
+{% block page_title %}👥 Team Management{% endblock %}
+{% block content %}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start">
+  <div class="card">
+    <div class="card-header"><div class="card-title">Team Members</div></div>
+    <table class="table">
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Claims</th><th></th></tr></thead>
+      <tbody>
+      {% for u in users %}
+      <tr>
+        <td style="font-weight:600">{{ u.name or '—' }}</td>
+        <td style="font-size:.85rem">{{ u.email }}</td>
+        <td><span class="badge {% if u.role=='admin' %}badge-submitted{% else %}badge-new{% endif %}">{{ u.role }}</span></td>
+        <td>{{ u.claim_count }}</td>
+        <td>
+          {% if u.id != session.user_id %}
+          <form method="POST" action="{{ url_for('delete_team_member', user_id=u.id) }}" onsubmit="return confirm('Remove this team member?')">
+            <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+          </form>
+          {% else %}
+          <span style="font-size:.75rem;color:#94a3b8">You</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">Add Team Member</div></div>
+    <form method="POST" action="{{ url_for('add_team_member') }}">
+      <div class="form-group"><label>Full Name</label><input class="form-control" type="text" name="name" placeholder="Jane Smith" required/></div>
+      <div class="form-group"><label>Email</label><input class="form-control" type="email" name="email" placeholder="adjuster@company.com" required/></div>
+      <div class="form-group"><label>Password</label><input class="form-control" type="password" name="password" placeholder="Min 8 characters" required/></div>
+      <div class="form-group">
+        <label>Role</label>
+        <select class="form-control" name="role">
+          <option value="adjuster">Adjuster</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary">Add Member</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
