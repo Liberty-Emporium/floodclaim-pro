@@ -123,13 +123,15 @@
     <div style="font-size:.8rem;font-weight:600;color:#64748b;margin-bottom:.5rem">Unassigned Photos</div>
     <div class="photo-grid">
       {% for photo in unassigned_photos %}
-      <div class="photo-card" id="photo-{{ photo.id }}">
-        <img src="{{ url_for('uploaded_file', filename=photo.filename) }}" alt="{{ photo.caption }}"/>
+      <div class="photo-card" id="photo-{{ photo.id }}"
+           data-photo-id="{{ photo.id }}"
+           data-caption="{{ photo.caption|e }}"
+           data-room-id=""
+           data-src="{{ url_for('uploaded_file', filename=photo.filename) }}">
+        <img src="{{ url_for('uploaded_file', filename=photo.filename) }}" alt="{{ photo.caption|e }}"/>
         <div class="photo-actions">
-          <button class="photo-btn photo-btn-edit" title="Edit"
-            onclick="openEditModal({{ photo.id }}, '{{ photo.caption|replace("'","\\'") }}', '', '{{ url_for('uploaded_file', filename=photo.filename) }}')">✏️</button>
-          <button class="photo-btn photo-btn-delete" title="Delete"
-            onclick="deletePhoto({{ photo.id }})">✕</button>
+          <button class="photo-btn photo-btn-edit" title="Edit" onclick="openEditModalFromCard(this.closest('.photo-card'))">✏️</button>
+          <button class="photo-btn photo-btn-delete" title="Delete" onclick="deletePhoto({{ photo.id }})">✕</button>
         </div>
         <div class="photo-card-body">
           {% if photo.caption %}<div style="font-weight:600;font-size:.8rem;margin-bottom:.3rem">{{ photo.caption }}</div>{% endif %}
@@ -163,13 +165,15 @@
       {% if rd.photos %}
       <div class="photo-grid" style="margin-top:0;margin-bottom:1rem">
         {% for photo in rd.photos %}
-        <div class="photo-card" id="photo-{{ photo.id }}">
-          <img src="{{ url_for('uploaded_file', filename=photo.filename) }}" alt="{{ photo.caption }}"/>
+        <div class="photo-card" id="photo-{{ photo.id }}"
+             data-photo-id="{{ photo.id }}"
+             data-caption="{{ photo.caption|e }}"
+             data-room-id="{{ rd.room.id }}"
+             data-src="{{ url_for('uploaded_file', filename=photo.filename) }}">
+          <img src="{{ url_for('uploaded_file', filename=photo.filename) }}" alt="{{ photo.caption|e }}"/>
           <div class="photo-actions">
-            <button class="photo-btn photo-btn-edit" title="Edit"
-              onclick="openEditModal({{ photo.id }}, '{{ photo.caption|replace("'","\\'") }}', '{{ rd.room.id }}', '{{ url_for('uploaded_file', filename=photo.filename) }}')">✏️</button>
-            <button class="photo-btn photo-btn-delete" title="Delete"
-              onclick="deletePhoto({{ photo.id }})">✕</button>
+            <button class="photo-btn photo-btn-edit" title="Edit" onclick="openEditModalFromCard(this.closest('.photo-card'))">✏️</button>
+            <button class="photo-btn photo-btn-delete" title="Delete" onclick="deletePhoto({{ photo.id }})">✕</button>
           </div>
           <div class="photo-card-body">
             {% if photo.caption %}<div style="font-weight:600;font-size:.8rem;margin-bottom:.3rem">{{ photo.caption }}</div>{% endif %}
@@ -298,10 +302,14 @@ async function deletePhoto(id) {
   }
 }
 
-function openEditModal(photoId, caption, roomId, imgSrc) {
-  document.getElementById('modalPreview').src = imgSrc;
+function openEditModalFromCard(card) {
+  const photoId = card.dataset.photoId;
+  const caption = card.dataset.caption;
+  const roomId  = card.dataset.roomId || '';
+  const src     = card.dataset.src;
+  document.getElementById('modalPreview').src = src;
   document.getElementById('modalCaption').value = caption;
-  document.getElementById('modalRoom').value = roomId || '';
+  document.getElementById('modalRoom').value = roomId;
   document.getElementById('editPhotoForm').action = '/photos/' + photoId + '/edit';
   document.getElementById('editModal').classList.add('open');
 }
