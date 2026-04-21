@@ -141,7 +141,7 @@ function submitSig() {
   if (!signer) { alert('Please enter your full name.'); return; }
   const sig_data = canvas.toDataURL();
   fetch('/claims/{{ claim.id }}/sign', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
+    method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ signer, sig_data })
   }).then(r => r.json()).then(d => {
     if (d.ok) { document.getElementById('sig-status').style.display = 'block'; }

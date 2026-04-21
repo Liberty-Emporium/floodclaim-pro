@@ -159,7 +159,7 @@ td{padding:.6rem .75rem;border-bottom:1px solid #f1f5f9}
 </div>
 <script>
 function femaLookup() {
-  fetch('/claims/{{ claim.id }}/fema-lookup', {method:'POST'})
+  fetch('/claims/{{ claim.id }}/fema-lookup', {method:'POST', credentials: 'include'})
     .then(r=>r.json()).then(d=>{
       if(d.ok) alert('FEMA Flood Zone: ' + d.flood_zone + '\nMap #: ' + (d.fema_map_number||'N/A') + '\nPage will reload.');
       else alert('Lookup failed: ' + (d.error||'unknown'));
@@ -167,7 +167,7 @@ function femaLookup() {
     });
 }
 function genPortal() {
-  fetch('/claims/{{ claim.id }}/portal/generate', {method:'POST'})
+  fetch('/claims/{{ claim.id }}/portal/generate', {method:'POST', credentials: 'include'})
     .then(r=>r.json()).then(d=>{
       if(d.ok) { prompt('Client portal link (copy and share):', d.portal_url); }
       else alert('Error: ' + (d.error||'unknown'));

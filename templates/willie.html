@@ -255,7 +255,7 @@ function addMessage(role, content, typing=false, iso=null) {
 
 // ── Conversations ─────────────────────────────────────────────────────────
 async function newConversation() {
-  const r = await fetch('/willie/conversations', {method:'POST'});
+  const r = await fetch('/willie/conversations', {method:'POST', credentials: 'include'});
   const c = await r.json();
   currentConvId = c.id;
   chatHistory   = [];
@@ -283,7 +283,7 @@ async function loadConversation(convId) {
 async function deleteConversation(e, convId) {
   e.stopPropagation();
   if (!confirm('Delete this conversation?')) return;
-  await fetch(`/willie/conversations/${convId}`, {method:'DELETE'});
+  await fetch(`/willie/conversations/${convId}`, {method:'DELETE', credentials: 'include'});
   document.getElementById(`conv-${convId}`)?.remove();
   if (currentConvId === convId) { currentConvId = null; chatHistory = []; clearMessages(); }
   if (!document.querySelector('.conv-item')) {
@@ -337,7 +337,7 @@ async function sendMessage() {
 
   // Create conversation if none
   if (!currentConvId) {
-    const r = await fetch('/willie/conversations', {method:'POST'});
+    const r = await fetch('/willie/conversations', {method:'POST', credentials: 'include'});
     const c = await r.json();
     currentConvId = c.id;
     refreshSidebar(c.id, c.title);
@@ -349,7 +349,7 @@ async function sendMessage() {
 
   try {
     const res = await fetch('/willie/chat', {
-      method:'POST',
+      method:'POST', credentials: 'include',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         message:         text,

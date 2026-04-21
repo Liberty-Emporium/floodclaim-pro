@@ -452,7 +452,7 @@ async function analyzePhotos() {
 
     try {
       const res = await fetch('/api/analyze-photo', {
-        method:  'POST',
+        method:  'POST', credentials: 'include',
         headers: {'Content-Type': 'application/json'},
         body:    JSON.stringify({image: b64, mime: mime, filename: file.name})
       });

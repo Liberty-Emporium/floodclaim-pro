@@ -324,13 +324,13 @@ function toggleRoom(id) {
 
 async function deleteItem(id, btn) {
   if (!confirm('Delete this line item?')) return;
-  const r = await fetch('/items/' + id + '/delete', {method:'POST'});
+  const r = await fetch('/items/' + id + '/delete', {method:'POST', credentials: 'include'});
   if (r.ok) { btn.closest('tr').remove(); location.reload(); }
 }
 
 async function deletePhoto(id) {
   if (!confirm('Delete this photo? This cannot be undone.')) return;
-  const r = await fetch('/photos/' + id + '/delete', {method:'POST'});
+  const r = await fetch('/photos/' + id + '/delete', {method:'POST', credentials: 'include'});
   const data = await r.json();
   if (data.ok) {
     const card = document.getElementById('photo-' + id);
@@ -351,7 +351,7 @@ async function reanalyzePhoto(photoId, btn) {
   btn.disabled = true;
   descEl.innerHTML = '<span class="ai-analyzing-tag">⏳ Analyzing...</span>';
   try {
-    const r = await fetch('/photos/' + photoId + '/analyze', {method: 'POST'});
+    const r = await fetch('/photos/' + photoId + '/analyze', {method: 'POST', credentials: 'include'});
     const data = await r.json();
     if (data.description) {
       descEl.textContent = data.description;
