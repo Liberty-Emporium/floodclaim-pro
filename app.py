@@ -1468,6 +1468,10 @@ def settings():
             val = request.form.get(key, '').strip()
             if val:
                 set_setting(key, val)
+        # Willie integration key
+        willie_key_input = request.form.get('willie_agent_key', '').strip()
+        if willie_key_input and not willie_key_input.endswith('...'):
+            set_setting('willie_agent_key', willie_key_input)
         flash('Settings saved!', 'success')
         return redirect(url_for('settings'))
     current_key = get_setting('openrouter_api_key')
@@ -1477,13 +1481,15 @@ def settings():
             masked_key = current_key[:8] + '•' * (len(current_key) - 12) + current_key[-4:]
         else:
             masked_key = '••••••••'
-    env_key_set    = bool(OPENROUTER_KEY)
-    current_model  = get_setting('ai_model', 'openai/gpt-4o-mini')
+    env_key_set       = bool(OPENROUTER_KEY)
+    current_model     = get_setting('ai_model', 'openai/gpt-4o-mini')
+    current_willie_key = get_setting('willie_agent_key', '')
     return render_template('settings.html',
                            masked_key=masked_key,
                            key_is_set=bool(current_key),
                            env_key_set=env_key_set,
-                           current_model=current_model)
+                           current_model=current_model,
+                           current_willie_key=current_willie_key)
 
 # ── Admin: Team Management ────────────────────────────────────────────────────
 
@@ -2236,7 +2242,7 @@ def willie_update_settings():
     data = request.get_json(silent=True) or {}
     db = get_db()
     # Accept both 'ai_model' and legacy 'openrouter_model' alias
-    allowed = {'openrouter_api_key', 'ai_model', 'openrouter_model'}
+    allowed = {'openrouter_api_key', 'ai_model', 'openrouter_model', 'willie_agent_key', 'willie_agent_id'}
     updated = []
     for key, value in data.items():
         if key in allowed:
@@ -2245,6 +2251,201 @@ def willie_update_settings():
             updated.append(store_key)
     db.commit()
     return jsonify({'ok': True, 'updated': updated})
+
+
+@app.route('/willie/api/actions/sync', methods=['POST'])
+def willie_sync_actions():
+    """Push all FloodClaim actions to Willie's widget so he can use them correctly.
+    Requires willie_agent_key to be set in settings (Willie's own widget API key).
+    Auth: Willie token OR admin session."""
+    if not session.get('user_id') and not willie_auth():
+        return jsonify({'error': 'unauthorized'}), 401
+
+    WIDGET_BASE     = 'https://ai-agent-widget-production.up.railway.app'
+    FLOOD_BASE      = 'https://billy-floods.up.railway.app'
+    WILLIE_AGENT_ID = get_setting('willie_agent_id', 'F5J8yYT6a6GrppjviN6p8w')
+    willie_key      = get_setting('willie_agent_key', '')
+    flood_token     = get_willie_token()
+
+    if not willie_key:
+        return jsonify({'ok': False,
+                        'error': 'willie_agent_key not set. Go to Settings and paste Willie\'s widget API key.'}), 400
+
+    # Full correct action definitions — {param} placeholders get substituted by the widget engine
+    ACTIONS = [
+        {
+            'name':        'get_dashboard',
+            'description': 'Get FloodClaim Pro dashboard stats: total claims, pipeline value, status breakdown, recent claims.',
+            'method':      'GET',
+            'url':         f'{FLOOD_BASE}/willie/api/dashboard',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {},
+        },
+        {
+            'name':        'list_claims',
+            'description': 'List all flood damage claims. Use this to find a claim ID from a client name or claim number.',
+            'method':      'GET',
+            'url':         f'{FLOOD_BASE}/willie/api/claims',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {},
+        },
+        {
+            'name':        'lookup_claim',
+            'description': 'Look up a specific claim by claim_number (e.g. FC-202604-XXXX) or partial client name. Always do this before adding rooms/items to find the correct claim ID.',
+            'method':      'GET',
+            'url':         f'{FLOOD_BASE}/willie/api/claims/lookup?claim_number={{claim_number}}',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {},
+        },
+        {
+            'name':        'get_claim',
+            'description': 'Get full details of a claim including rooms and line items. Requires numeric claim_id.',
+            'method':      'GET',
+            'url':         f'{FLOOD_BASE}/willie/api/claims/{{claim_id}}',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {},
+        },
+        {
+            'name':        'create_claim',
+            'description': 'Create a new flood damage claim. Requires client_name, property_address, flood_date.',
+            'method':      'POST',
+            'url':         f'{FLOOD_BASE}/willie/api/claims',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {'client_name': '{client_name}', 'property_address': '{property_address}',
+                            'flood_date': '{flood_date}', 'insurance_company': '{insurance_company}'},
+        },
+        {
+            'name':        'update_claim_status',
+            'description': 'Update the status of a claim. Status must be one of: New, In Progress, Submitted, Closed.',
+            'method':      'POST',
+            'url':         f'{FLOOD_BASE}/willie/api/claims/{{claim_id}}/status',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {'status': '{status}'},
+        },
+        {
+            'name':        'add_room',
+            'description': 'Add a room to a claim. ALWAYS call lookup_claim first to get the numeric claim_id. Requires claim_id (number) and room_name.',
+            'method':      'POST',
+            'url':         f'{FLOOD_BASE}/willie/api/claims/{{claim_id}}/rooms',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {'room_name': '{room_name}'},
+        },
+        {
+            'name':        'list_rooms',
+            'description': 'List all rooms and line items for a claim. Requires numeric claim_id.',
+            'method':      'GET',
+            'url':         f'{FLOOD_BASE}/willie/api/claims/{{claim_id}}/rooms',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {},
+        },
+        {
+            'name':        'add_line_item',
+            'description': 'Add a line item (damage item) to a room. ALWAYS call list_rooms first to get the numeric room_id. Requires claim_id, room_id, description, quantity, unit, unit_cost.',
+            'method':      'POST',
+            'url':         f'{FLOOD_BASE}/willie/api/claims/{{claim_id}}/rooms/{{room_id}}/items',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {'description': '{description}', 'quantity': '{quantity}',
+                            'unit': '{unit}', 'unit_cost': '{unit_cost}'},
+        },
+        {
+            'name':        'delete_room',
+            'description': 'Delete a room and all its line items from a claim.',
+            'method':      'DELETE',
+            'url':         f'{FLOOD_BASE}/willie/api/claims/{{claim_id}}/rooms/{{room_id}}',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {},
+        },
+        {
+            'name':        'delete_line_item',
+            'description': 'Delete a single line item by its numeric item_id.',
+            'method':      'DELETE',
+            'url':         f'{FLOOD_BASE}/willie/api/line-items/{{item_id}}',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {},
+        },
+        {
+            'name':        'get_report',
+            'description': 'Get a full damage report for a claim including all rooms and line items.',
+            'method':      'GET',
+            'url':         f'{FLOOD_BASE}/willie/api/claims/{{claim_id}}/report',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {},
+        },
+        {
+            'name':        'generate_estimate',
+            'description': 'Trigger AI estimate generation for a claim. Returns a job_id to poll for results.',
+            'method':      'POST',
+            'url':         f'{FLOOD_BASE}/willie/api/claims/{{claim_id}}/estimate',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {},
+        },
+        {
+            'name':        'list_team',
+            'description': 'List all adjusters and team members.',
+            'method':      'GET',
+            'url':         f'{FLOOD_BASE}/willie/api/team',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {},
+        },
+        {
+            'name':        'add_team_member',
+            'description': 'Add a new adjuster or team member. Requires name, email, password, role (adjuster or admin).',
+            'method':      'POST',
+            'url':         f'{FLOOD_BASE}/willie/api/team',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {'name': '{name}', 'email': '{email}',
+                            'password': '{password}', 'role': '{role}'},
+        },
+        {
+            'name':        'delete_team_member',
+            'description': 'Remove a team member by their numeric user_id.',
+            'method':      'DELETE',
+            'url':         f'{FLOOD_BASE}/willie/api/team/{{user_id}}',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {},
+        },
+        {
+            'name':        'get_settings',
+            'description': 'Get current FloodClaim Pro app settings (AI model, etc.)',
+            'method':      'GET',
+            'url':         f'{FLOOD_BASE}/willie/api/settings',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {},
+        },
+    ]
+
+    pushed = []
+    errors = []
+    for action in ACTIONS:
+        payload = {
+            'name':        action['name'],
+            'description': action['description'],
+            'method':      action['method'],
+            'url':         action['url'],
+            'headers':     action['headers'],
+            'body':        action['body'],
+        }
+        try:
+            r = _req.post(
+                f'{WIDGET_BASE}/agent/{WILLIE_AGENT_ID}/actions/api',
+                headers={'Authorization': f'Bearer {willie_key}',
+                         'Content-Type': 'application/json'},
+                json=payload, timeout=15)
+            d = r.json()
+            if d.get('ok'):
+                pushed.append(action['name'])
+            else:
+                errors.append({'action': action['name'], 'error': d.get('error', str(d))})
+        except Exception as e:
+            errors.append({'action': action['name'], 'error': str(e)})
+
+    return jsonify({
+        'ok':     len(errors) == 0,
+        'pushed': pushed,
+        'errors': errors,
+        'total':  len(ACTIONS),
+        'message': f'{len(pushed)}/{len(ACTIONS)} actions synced to Willie'
+    })
 
 
 @app.route('/health')

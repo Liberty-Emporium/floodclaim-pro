@@ -175,6 +175,53 @@
     {% endif %}
   </div>
 
+  <!-- Willie Integration -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">🤖 Willie Integration</div>
+      {% set willie_key = current_willie_key or '' %}
+      {% if willie_key %}
+        <span class="key-status key-set">✅ Connected</span>
+      {% else %}
+        <span class="key-status key-unset">⚠️ Not Connected</span>
+      {% endif %}
+    </div>
+
+    <div class="info-box">
+      <strong>Willie</strong> is your AI assistant in the chat bubble — he can add rooms, line items,
+      look up claims, and more. Paste his API key (from <strong>AI Agent Widget → Willie → Edit</strong>)
+      then click <strong>Sync Actions</strong> to wire everything up.
+    </div>
+
+    <form method="POST">
+      <div class="form-group">
+        <label>Willie Widget API Key</label>
+        <input class="form-control" type="password" name="willie_agent_key"
+               placeholder="Paste Willie's API key from the widget admin..."
+               autocomplete="new-password"
+               value="{{ willie_key[:8] + '...' if willie_key else '' }}"/>
+        <div style="font-size:.78rem;color:var(--gray-400);margin-top:.35rem;">
+          Find it: AI Agent Widget app → Willie → Edit → copy the API Key field.
+        </div>
+      </div>
+      <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;">
+        <button type="submit" class="btn btn-primary btn-sm">💾 Save Willie Key</button>
+        {% if willie_key %}
+        <button type="button" class="btn btn-cyan btn-sm" onclick="syncWillieActions()">⚡ Sync Actions to Willie</button>
+        {% endif %}
+      </div>
+    </form>
+
+    {% if willie_key %}
+    <div id="willie-sync-status" style="margin-top:1rem;display:none;"></div>
+    <div style="margin-top:1.25rem;border-top:1px solid #e2e8f0;padding-top:1rem;font-size:.82rem;color:#64748b;">
+      <strong>Willie's current actions:</strong> get_dashboard, list_claims, lookup_claim, get_claim,
+      create_claim, update_claim_status, add_room, list_rooms, add_line_item, delete_room,
+      delete_line_item, get_report, generate_estimate, list_team, add_team_member, delete_team_member, get_settings
+    </div>
+    {% endif %}
+  </div>
+
   <!-- How It Works -->
   <div class="card">
     <div class="card-header">
@@ -197,4 +244,39 @@
   </div>
 
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function syncWillieActions() {
+  var btn  = event.target;
+  var stat = document.getElementById('willie-sync-status');
+  btn.disabled = true;
+  btn.textContent = '⏳ Syncing...';
+  stat.style.display = 'block';
+  stat.innerHTML = '<span style="color:#64748b">Pushing actions to Willie...</span>';
+  fetch('/willie/api/actions/sync', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    credentials: 'include'
+  })
+  .then(r => r.json())
+  .then(d => {
+    btn.disabled = false;
+    btn.textContent = '⚡ Sync Actions to Willie';
+    if (d.ok) {
+      stat.innerHTML = '<span style="color:#065f46">✅ ' + d.message + '</span>';
+    } else if (d.pushed && d.pushed.length > 0) {
+      stat.innerHTML = '<span style="color:#92400e">⚠️ ' + d.message + '</span>';
+    } else {
+      stat.innerHTML = '<span style="color:#ef4444">❌ ' + (d.error || d.message || 'Sync failed') + '</span>';
+    }
+  })
+  .catch(e => {
+    btn.disabled = false;
+    btn.textContent = '⚡ Sync Actions to Willie';
+    stat.innerHTML = '<span style="color:#ef4444">❌ Network error: ' + e.message + '</span>';
+  });
+}
+</script>
 {% endblock %}
