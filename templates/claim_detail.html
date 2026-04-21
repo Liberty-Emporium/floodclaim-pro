@@ -562,49 +562,94 @@ function extractTotal(text) {
   return null;
 }
 
+var _estimatePollTimer = null;
+var _estimateSeconds = 0;
+
+function _estimateLoading(msg) {
+  document.getElementById('estimateContent').innerHTML =
+    '<div style="text-align:center;padding:2.5rem">' +
+    '<div style="font-size:2.5rem;margin-bottom:1rem">🤖</div>' +
+    '<p style="color:#64748b;font-size:.95rem">' + msg + '</p>' +
+    '<div id="estimateTimer" style="color:#94a3b8;font-size:.8rem;margin-top:.5rem">0s</div>' +
+    '</div>';
+}
+
+function _estimateShowResult(d) {
+  if (_estimatePollTimer) { clearInterval(_estimatePollTimer); _estimatePollTimer = null; }
+  if (!d.ok || d.status === 'error') {
+    document.getElementById('estimateContent').innerHTML =
+      '<p style="color:#ef4444">❌ ' + escHtml(d.error || 'Estimate failed') + '</p>';
+    return;
+  }
+  var estimate = d.estimate || '';
+  if (estimate.startsWith('Error:') || estimate.startsWith('AI Error:')) {
+    document.getElementById('estimateContent').innerHTML =
+      '<p style="color:#ef4444">❌ ' + escHtml(estimate) + '</p>';
+    return;
+  }
+  var rendered = renderEstimate(estimate);
+  var html = '<div style="font-size:.875rem;line-height:1.75">' + rendered + '</div>';
+  html += '<div style="margin-top:1.5rem;padding:1rem 1.25rem;background:#f0fdf4;border-radius:10px;border:1px solid #6ee7b7;display:flex;gap:1.5rem;flex-wrap:wrap;align-items:center">';
+  if (d.current_total !== undefined)
+    html += '<span><strong style="color:#065f46">📊 Was: </strong>$' + parseFloat(d.current_total).toFixed(2) + '</span>';
+  html += '<span style="color:#94a3b8;font-size:.8rem">⏱ ' + _estimateSeconds + 's</span>';
+  html += '</div>';
+  document.getElementById('estimateContent').innerHTML = html;
+  var newTotal = extractTotal(estimate);
+  if (newTotal && newTotal > 0) {
+    fetch('/claims/{{ claim.id }}/update-estimate', {
+      method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
+      body: JSON.stringify({total_estimate: newTotal})
+    }).then(r=>r.json()).then(upd=>{
+      if (upd.ok) {
+        var el = document.getElementById('claim-total-estimate');
+        if (el) el.textContent = '$' + newTotal.toLocaleString('en-US',{minimumFractionDigits:2});
+      }
+    }).catch(()=>{});
+  }
+}
+
 function runAIEstimate() {
   document.getElementById('estimateModal').style.display = 'flex';
-  document.getElementById('estimateContent').innerHTML = '<div style="text-align:center;padding:2.5rem"><div style="font-size:2.5rem;margin-bottom:1rem">🤖</div><p style="color:#64748b;font-size:.95rem">Analyzing damage photos and generating estimate...<br><small style="color:#94a3b8">This takes 20–40 seconds for a full report</small></p></div>';
-  fetch('/claims/{{ claim.id }}/ai-estimate', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include'})
-    .then(r => {
-      if (r.status === 401) return {ok: false, error: 'Session expired — please refresh the page and log back in.'};
-      return r.json().catch(() => ({ok: false, error: 'Server returned an unexpected response (HTTP ' + r.status + '). Try refreshing.'}));
-    })
-    .then(d => {
-      if (d.ok) {
-        // Detect error string in estimate body
-        if (d.estimate && d.estimate.startsWith('Error:')) {
-          document.getElementById('estimateContent').innerHTML = '<p style="color:#ef4444">❌ ' + escHtml(d.estimate) + '</p>';
-          return;
-        }
-        let rendered = renderEstimate(d.estimate || '(No estimate returned)');
-        let html = '<div style="font-size:.875rem;line-height:1.75">' + rendered + '</div>';
-        // Summary bar
-        html += '<div style="margin-top:1.5rem;padding:1rem 1.25rem;background:#f0fdf4;border-radius:10px;border:1px solid #6ee7b7;display:flex;gap:1.5rem;flex-wrap:wrap;align-items:center">';
-        html += '<span><strong style="color:#065f46">📊 Was: </strong><span style="color:#374151">$' + d.current_total.toFixed(2) + '</span></span>';
-        if (d.photos_analyzed > 0) html += '<span style="color:#047857">📸 ' + d.photos_analyzed + ' photo' + (d.photos_analyzed>1?'s':'') + ' analyzed</span>';
-        html += '</div>';
-        document.getElementById('estimateContent').innerHTML = html;
-        // Auto-extract and save grand total
-        var newTotal = extractTotal(d.estimate);
-        if (newTotal && newTotal > 0) {
-          fetch('/claims/{{ claim.id }}/update-estimate', {
-            method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include',
-            body: JSON.stringify({total_estimate: newTotal})
-          }).then(r => r.json()).then(upd => {
-            if (upd.ok) {
-              var el = document.getElementById('claim-total-estimate');
-              if (el) el.textContent = '$' + newTotal.toLocaleString('en-US', {minimumFractionDigits:2});
-            }
-          }).catch(() => {});
-        }
-      } else {
-        document.getElementById('estimateContent').innerHTML = '<p style="color:#ef4444">❌ ' + escHtml(d.error || 'Estimate failed') + '</p>';
+  _estimateSeconds = 0;
+  _estimateLoading('Starting AI estimate job...');
+
+  fetch('/claims/{{ claim.id }}/ai-estimate', {
+    method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include'
+  })
+  .then(r => {
+    if (r.status === 401) return {ok:false, error:'Session expired — please refresh and log in.'};
+    return r.json().catch(()=>({ok:false, error:'Unexpected response ('+r.status+')'}));
+  })
+  .then(d => {
+    if (!d.ok) { _estimateShowResult(d); return; }
+    var jobId = d.job_id;
+    _estimateLoading('Analyzing photos and building estimate…<br><small style="color:#94a3b8">Hang tight — this takes 20–60 seconds</small>');
+    // Start timer display
+    var timerEl = document.getElementById('estimateTimer');
+    var timerInt = setInterval(()=>{ _estimateSeconds++; if(timerEl) timerEl.textContent = _estimateSeconds+'s'; }, 1000);
+    // Poll every 3 seconds
+    var polls = 0;
+    _estimatePollTimer = setInterval(()=>{
+      polls++;
+      if (polls > 40) { // 2 min timeout
+        clearInterval(_estimatePollTimer); clearInterval(timerInt);
+        _estimateShowResult({ok:false, error:'Estimate timed out after 2 minutes. Try again.'});
+        return;
       }
-    })
-    .catch(e => {
-      document.getElementById('estimateContent').innerHTML = '<p style="color:#ef4444">❌ Network error: ' + escHtml(e.message) + '<br><small>Check your connection or try refreshing.</small></p>';
-    });
+      fetch('/claims/{{ claim.id }}/ai-estimate/' + jobId, {credentials:'include'})
+      .then(r=>r.json())
+      .then(poll=>{
+        if (poll.status === 'pending') return; // still working
+        clearInterval(_estimatePollTimer); clearInterval(timerInt);
+        _estimateShowResult(poll);
+      })
+      .catch(()=>{});
+    }, 3000);
+  })
+  .catch(e => {
+    _estimateShowResult({ok:false, error:'Network error: '+e.message});
+  });
 }
 function closeEstimateModal() {
   document.getElementById('estimateModal').style.display = 'none';
