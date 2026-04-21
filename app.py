@@ -901,32 +901,38 @@ def new_claim():
 @app.route('/claims/<int:claim_id>')
 @login_required
 def claim_detail(claim_id):
-    db = get_db()
-    claim = db.execute('''SELECT c.*, u.name as adjuster_name
-        FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''',
-        (claim_id,)).fetchone()
-    if not claim:
-        flash('Claim not found.', 'error')
+    try:
+        db = get_db()
+        claim = db.execute('''SELECT c.*, u.name as adjuster_name
+            FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''',
+            (claim_id,)).fetchone()
+        if not claim:
+            flash('Claim not found.', 'error')
+            return redirect(url_for('dashboard'))
+        rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+        room_data = []
+        for room in rooms:
+            items  = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
+            photos = db.execute('SELECT * FROM photos WHERE room_id=? ORDER BY id',     (room['id'],)).fetchall()
+            room_data.append({'room': room, 'items': items, 'photos': photos})
+        unassigned_photos = db.execute(
+            'SELECT * FROM photos WHERE claim_id=? AND room_id IS NULL ORDER BY id',
+            (claim_id,)).fetchall()
+        recalc_claim(claim_id)
+        # Re-fetch after recalc so totals are fresh
+        claim = db.execute('''SELECT c.*, u.name as adjuster_name
+            FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''',
+            (claim_id,)).fetchone()
+        if not claim:
+            flash('Claim not found.', 'error')
+            return redirect(url_for('dashboard'))
+        return render_template('claim_detail.html', claim=claim,
+                               room_data=room_data, unassigned_photos=unassigned_photos)
+    except Exception as _claim_err:
+        import traceback as _tb
+        print(f'[claim_detail ERROR] claim_id={claim_id}: {_claim_err}\n{_tb.format_exc()}')
+        flash(f'Error loading claim — check server logs for details: {_claim_err}', 'error')
         return redirect(url_for('dashboard'))
-    rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
-    room_data = []
-    for room in rooms:
-        items  = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
-        photos = db.execute('SELECT * FROM photos WHERE room_id=? ORDER BY id',     (room['id'],)).fetchall()
-        room_data.append({'room': room, 'items': items, 'photos': photos})
-    unassigned_photos = db.execute(
-        'SELECT * FROM photos WHERE claim_id=? AND room_id IS NULL ORDER BY id',
-        (claim_id,)).fetchall()
-    recalc_claim(claim_id)
-    # Re-fetch after recalc so totals are fresh
-    claim = db.execute('''SELECT c.*, u.name as adjuster_name
-        FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''',
-        (claim_id,)).fetchone()
-    if not claim:
-        flash('Claim not found.', 'error')
-        return redirect(url_for('dashboard'))
-    return render_template('claim_detail.html', claim=claim,
-                           room_data=room_data, unassigned_photos=unassigned_photos)
 
 @app.route('/claims/<int:claim_id>/status', methods=['POST'])
 @login_required
