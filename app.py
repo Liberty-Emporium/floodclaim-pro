@@ -469,7 +469,12 @@ def ai_estimate(claim_id):
     photo_analyses = []
     for photo in photos[:8]:
         photo_path = os.path.join(UPLOAD_DIR, photo['filename'])
-        desc = photo.get('ai_description', '')
+        desc = photo.get('ai_description', '') or ''
+        # Clear cached error strings so they get retried
+        if desc.startswith('AI analysis failed') or desc.startswith('Error'):
+            desc = ''
+            db.execute('UPDATE photos SET ai_description=NULL WHERE id=?', (photo['id'],))
+            db.commit()
         if not desc and os.path.exists(photo_path):
             desc = ai_describe_photo(photo_path)
             if desc:
@@ -478,7 +483,11 @@ def ai_estimate(claim_id):
         if desc:
             label = photo.get('caption') or photo['filename']
             photo_analyses.append(f"  [{label}]: {desc}")
+    photo_count = len(photos)
+    missing_files = sum(1 for p in photos[:8] if not os.path.exists(os.path.join(UPLOAD_DIR, p['filename'])))
     photo_section = '\n'.join(photo_analyses) if photo_analyses else '  No photos uploaded yet.'
+    if missing_files > 0:
+        photo_section += f'\n  Note: {missing_files} photo file(s) not found on disk.'
 
     PRICING_KNOWLEDGE_BASE = """
 === 2026 FLOOD RESTORATION PRICING REFERENCE (USE THESE RATES) ===
@@ -838,16 +847,24 @@ def billing_checkout():
     flash('Stripe integration coming soon — add STRIPE_SECRET_KEY in Settings to activate.', 'info')
     return redirect(url_for('billing'))
 
-def call_openrouter(messages, model, key):
+def call_openrouter(messages, model, key, max_tokens=4000):
     """Call OpenRouter chat completions API. Returns response text or error string."""
     try:
         r = _req.post(
             'https://openrouter.ai/api/v1/chat/completions',
             headers={'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'},
-            json={'model': model, 'messages': messages, 'max_tokens': 1500},
-            timeout=60
+            json={'model': model, 'messages': messages, 'max_tokens': max_tokens},
+            timeout=90
         )
+        if r.status_code == 401:
+            return 'Error: Invalid or expired OpenRouter API key. Please update it in Settings.'
+        if r.status_code == 402:
+            return 'Error: OpenRouter account out of credits. Please add credits at openrouter.ai.'
+        if r.status_code == 429:
+            return 'Error: AI rate limit reached. Please wait a moment and try again.'
         data = r.json()
+        if 'error' in data:
+            return f'AI Error: {data["error"].get("message", str(data["error"]))}'
         return data['choices'][0]['message']['content'].strip()
     except Exception as e:
         return f'Error calling AI: {str(e)}'
@@ -897,7 +914,7 @@ def ai_describe_photo(image_path):
             }, timeout=30)
         return r.json()['choices'][0]['message']['content']
     except Exception as e:
-        return f'AI analysis failed: {str(e)}'
+        return ''  # Return empty so it can be retried — never pollute DB with error strings
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -1556,15 +1573,19 @@ def willie_generate_estimate(claim_id):
     photo_analyses = []
     for photo in photos[:8]:  # limit to 8 photos to avoid token overflow
         photo_path = os.path.join(UPLOAD_DIR, photo['filename'])
-        if os.path.exists(photo_path):
-            if photo.get('ai_description'):
-                photo_analyses.append(f"Photo ({photo['caption'] or photo['filename']}): {photo['ai_description']}")
-            else:
-                analysis = ai_describe_photo(photo_path)
-                if analysis:
-                    db.execute('UPDATE photos SET ai_description=? WHERE id=?', (analysis, photo['id']))
-                    db.commit()
-                    photo_analyses.append(f"Photo ({photo['caption'] or photo['filename']}): {analysis}")
+        desc = photo.get('ai_description', '') or ''
+        # Clear cached error strings so they get retried
+        if desc.startswith('AI analysis failed') or desc.startswith('Error'):
+            desc = ''
+            db.execute('UPDATE photos SET ai_description=NULL WHERE id=?', (photo['id'],))
+            db.commit()
+        if not desc and os.path.exists(photo_path):
+            desc = ai_describe_photo(photo_path)
+            if desc:
+                db.execute('UPDATE photos SET ai_description=? WHERE id=?', (desc, photo['id']))
+                db.commit()
+        if desc:
+            photo_analyses.append(f"Photo ({photo['caption'] or photo['filename']}): {desc}")
 
     photo_section = '\n'.join(photo_analyses) if photo_analyses else 'No photos uploaded yet.'
     room_section  = '\n'.join(room_summary) if room_summary else 'No rooms documented yet.'

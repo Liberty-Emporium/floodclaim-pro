@@ -510,53 +510,100 @@ function editAiDesc(photoId) {
 }
 
 // ── AI Estimate ──
+// Render markdown-lite: bold, headers, pipe tables, line breaks
+function renderEstimate(text) {
+  // Escape HTML first
+  let s = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // H3 ### heading
+  s = s.replace(/^### (.+)$/gm, '<h4 style="font-size:.92rem;font-weight:700;color:#0a1628;margin:1rem 0 .3rem">$1</h4>');
+  // H2 ## heading
+  s = s.replace(/^## (.+)$/gm, '<h3 style="font-size:1rem;font-weight:800;color:#0a1628;margin:1.25rem 0 .4rem;border-bottom:1px solid #e2e8f0;padding-bottom:.25rem">$1</h3>');
+  // H1 # heading
+  s = s.replace(/^# (.+)$/gm, '<h2 style="font-size:1.1rem;font-weight:800;color:#0a1628;margin:1.5rem 0 .5rem">$1</h2>');
+  // Bold **text**
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Pipe table rows  | col | col |
+  s = s.replace(/^(\|.+\|)$/gm, function(row) {
+    // Skip separator rows like |---|---|
+    if (/^\|[\s\-:|]+\|$/.test(row)) return '';
+    let cells = row.split('|').filter((c,i,a) => i>0 && i<a.length-1);
+    let isHeader = /^\|\s*[A-Z]/.test(row);
+    let tag = isHeader ? 'th' : 'td';
+    let style = isHeader ? 'background:#f8fafc;font-weight:700;' : '';
+    return '<tr>' + cells.map(c => `<${tag} style="padding:.35rem .6rem;border:1px solid #e2e8f0;${style}">${c.trim()}</${tag}>`).join('') + '</tr>';
+  });
+  // Wrap consecutive <tr> blocks in a table
+  s = s.replace(/(<tr>.*<\/tr>\n?)+/gs, m => '<table style="border-collapse:collapse;width:100%;margin:.5rem 0;font-size:.82rem">'+m+'</table>');
+  // Bullet lines starting with - or *
+  s = s.replace(/^[-*] (.+)$/gm, '<li style="margin:.15rem 0;padding-left:.25rem">$1</li>');
+  s = s.replace(/(<li[^>]*>.*<\/li>\n?)+/gs, m => '<ul style="padding-left:1.25rem;margin:.4rem 0">'+m+'</ul>');
+  // Remaining line breaks → <br>
+  s = s.replace(/\n/g, '<br>');
+  // Clean up excess breaks around block elements
+  s = s.replace(/(<br>)+(<\/?(?:h[1-6]|ul|table|li|tr))/g, '$2');
+  s = s.replace(/(<\/(?:h[1-6]|ul|table)>)(<br>)+/g, '$1');
+  return s;
+}
+
+function extractTotal(text) {
+  // Try multiple patterns — handles plain text, markdown bold, all-caps, etc.
+  var patterns = [
+    /GRAND TOTAL[^$\d]*\$?([\d,]+(?:\.\d{2})?)/im,
+    /TOTAL RECOMMENDED CLAIM[^$\d]*\$?([\d,]+(?:\.\d{2})?)/im,
+    /Recommended Claim Amount[^$\d]*\$?([\d,]+(?:\.\d{2})?)/im,
+    /Final Recommended[^$\d]*\$?([\d,]+(?:\.\d{2})?)/im,
+    /\*\*GRAND TOTAL[^$\d]*\$?([\d,]+(?:\.\d{2})?)/im,
+    /\*\*Total Recommended[^$\d]*\$?([\d,]+(?:\.\d{2})?)/im,
+  ];
+  for (var i = 0; i < patterns.length; i++) {
+    var m = text.match(patterns[i]);
+    if (m) { var v = parseFloat(m[1].replace(/,/g,'')); if (v > 500) return v; }
+  }
+  return null;
+}
+
 function runAIEstimate() {
   document.getElementById('estimateModal').style.display = 'flex';
-  document.getElementById('estimateContent').innerHTML = '<div style="text-align:center;padding:2rem"><div style="font-size:2rem;margin-bottom:1rem">🤖</div><p style="color:#64748b">Analyzing photos and generating estimate...<br><small>This may take 15-30 seconds</small></p></div>';
+  document.getElementById('estimateContent').innerHTML = '<div style="text-align:center;padding:2.5rem"><div style="font-size:2.5rem;margin-bottom:1rem">🤖</div><p style="color:#64748b;font-size:.95rem">Analyzing damage photos and generating estimate...<br><small style="color:#94a3b8">This takes 20–40 seconds for a full report</small></p></div>';
   fetch('/claims/{{ claim.id }}/ai-estimate', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include'})
     .then(r => {
-      if (!r.ok && r.status === 401) {
-        return {ok: false, error: 'Session expired — please refresh the page and log back in.'};
-      }
-      return r.json().catch(() => ({ok: false, error: 'Server returned an unexpected response (HTTP ' + r.status + '). Try refreshing the page.'}));
+      if (r.status === 401) return {ok: false, error: 'Session expired — please refresh the page and log back in.'};
+      return r.json().catch(() => ({ok: false, error: 'Server returned an unexpected response (HTTP ' + r.status + '). Try refreshing.'}));
     })
     .then(d => {
       if (d.ok) {
-        let html = '<div style="white-space:pre-wrap;font-family:inherit;font-size:.875rem;line-height:1.7">' + escHtml(d.estimate) + '</div>';
-        html += '<div style="margin-top:1.5rem;padding:1rem;background:#f0fdf4;border-radius:8px;border:1px solid #6ee7b7">';
-        html += '<strong style="color:#065f46">📊 Current Total: $' + d.current_total.toFixed(2) + '</strong>';
-        if (d.photos_analyzed > 0) html += '<span style="margin-left:1rem;color:#047857">📸 ' + d.photos_analyzed + ' photos analyzed</span>';
+        // Detect error string in estimate body
+        if (d.estimate && d.estimate.startsWith('Error:')) {
+          document.getElementById('estimateContent').innerHTML = '<p style="color:#ef4444">❌ ' + escHtml(d.estimate) + '</p>';
+          return;
+        }
+        let rendered = renderEstimate(d.estimate || '(No estimate returned)');
+        let html = '<div style="font-size:.875rem;line-height:1.75">' + rendered + '</div>';
+        // Summary bar
+        html += '<div style="margin-top:1.5rem;padding:1rem 1.25rem;background:#f0fdf4;border-radius:10px;border:1px solid #6ee7b7;display:flex;gap:1.5rem;flex-wrap:wrap;align-items:center">';
+        html += '<span><strong style="color:#065f46">📊 Was: </strong><span style="color:#374151">$' + d.current_total.toFixed(2) + '</span></span>';
+        if (d.photos_analyzed > 0) html += '<span style="color:#047857">📸 ' + d.photos_analyzed + ' photo' + (d.photos_analyzed>1?'s':'') + ' analyzed</span>';
         html += '</div>';
         document.getElementById('estimateContent').innerHTML = html;
-        // Parse the recommended claim amount from the estimate and update the total field
-        var totalMatch = d.estimate.match(/[Rr]ecommended [Cc]laim [Aa]mount[:\s*$]*\$?([\d,]+(?:\.\d{2})?)/m) ||
-                         d.estimate.match(/[Ff]inal [Rr]ecommended.*?\$([\d,]+(?:\.\d{2})?)/m) ||
-                         d.estimate.match(/[Gg]rand [Tt]otal.*?\$([\d,]+(?:\.\d{2})?)/m);
-        if (totalMatch) {
-          var newTotal = parseFloat(totalMatch[1].replace(/,/g, ''));
-          if (!isNaN(newTotal) && newTotal > 0) {
-            // Save new total to DB
-            fetch('/claims/{{ claim.id }}/update-estimate', {
-              method: 'POST',
-              headers: {'Content-Type': 'application/json'},
-              credentials: 'include',
-              body: JSON.stringify({total_estimate: newTotal})
-            }).then(function(r){ return r.json(); }).then(function(upd){
-              if (upd.ok) {
-                // Update the visible total on the page
-                var totalEl = document.getElementById('claim-total-estimate');
-                if (totalEl) totalEl.textContent = '$' + newTotal.toLocaleString('en-US', {minimumFractionDigits:2});
-                console.log('Total estimate updated to $' + newTotal);
-              }
-            }).catch(function(){});
-          }
+        // Auto-extract and save grand total
+        var newTotal = extractTotal(d.estimate);
+        if (newTotal && newTotal > 0) {
+          fetch('/claims/{{ claim.id }}/update-estimate', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include',
+            body: JSON.stringify({total_estimate: newTotal})
+          }).then(r => r.json()).then(upd => {
+            if (upd.ok) {
+              var el = document.getElementById('claim-total-estimate');
+              if (el) el.textContent = '$' + newTotal.toLocaleString('en-US', {minimumFractionDigits:2});
+            }
+          }).catch(() => {});
         }
       } else {
-        document.getElementById('estimateContent').innerHTML = '<p style="color:#ef4444">❌ ' + (d.error || 'Estimate failed') + '</p>';
+        document.getElementById('estimateContent').innerHTML = '<p style="color:#ef4444">❌ ' + escHtml(d.error || 'Estimate failed') + '</p>';
       }
     })
     .catch(e => {
-      document.getElementById('estimateContent').innerHTML = '<p style="color:#ef4444">❌ Network error: ' + e.message + '<br><small>Check your connection or try refreshing the page.</small></p>';
+      document.getElementById('estimateContent').innerHTML = '<p style="color:#ef4444">❌ Network error: ' + escHtml(e.message) + '<br><small>Check your connection or try refreshing.</small></p>';
     });
 }
 function closeEstimateModal() {
