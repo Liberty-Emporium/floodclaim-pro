@@ -2448,6 +2448,182 @@ def willie_sync_actions():
     })
 
 
+@app.route('/willie/api/claims/<int:claim_id>', methods=['PATCH'])
+def willie_update_claim(claim_id):
+    """Update any field(s) on a claim. Accepts a JSON body with any claim columns.
+    Willie uses this to fill in form fields after analyzing photos or reviewing the claim."""
+    if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
+    db = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim: return jsonify({'error': 'Claim not found'}), 404
+
+    data = request.get_json(silent=True) or {}
+
+    # Allowed fields Willie can update
+    UPDATABLE = {
+        'client_name', 'client_phone', 'client_phone_alt', 'client_email',
+        'property_address', 'property_type', 'property_sqft', 'year_built',
+        'num_floors', 'flood_date', 'flood_source', 'water_category', 'water_class',
+        'water_depth_in', 'date_water_removed', 'inspection_date',
+        'insurance_company', 'policy_number', 'policy_type',
+        'coverage_building', 'coverage_contents', 'deductible',
+        'mortgage_company', 'mortgage_loan_number', 'cause_of_loss',
+        'priority', 'notes',
+    }
+
+    updates = {k: v for k, v in data.items() if k in UPDATABLE}
+    if not updates:
+        return jsonify({'error': 'No valid fields provided. Updatable fields: ' + ', '.join(sorted(UPDATABLE))}), 400
+
+    set_clause = ', '.join(f'{k}=?' for k in updates)
+    values     = list(updates.values()) + [claim_id]
+    db.execute(f'UPDATE claims SET {set_clause}, updated_at=CURRENT_TIMESTAMP WHERE id=?', values)
+    db.commit()
+
+    updated_claim = dict(db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone())
+    return jsonify({
+        'ok':      True,
+        'updated': list(updates.keys()),
+        'message': f'Updated {len(updates)} field(s) on claim {claim["claim_number"]}',
+        'claim':   {k: updated_claim.get(k) for k in updates},
+    })
+
+
+@app.route('/willie/api/claims/<int:claim_id>/analyze', methods=['POST'])
+def willie_analyze_claim(claim_id):
+    """Run vision AI on all claim photos and return structured field recommendations.
+    Willie uses this to fill in water_category, water_class, flood_source, damage description,
+    and suggested rooms/line items based purely on what the photos show."""
+    if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
+    db  = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim: return jsonify({'error': 'Claim not found'}), 404
+    claim = dict(claim)
+
+    key   = get_setting('openrouter_api_key') or OPENROUTER_KEY
+    model = get_setting('ai_model') or 'openai/gpt-4o-mini'
+    if not key:
+        return jsonify({'error': 'OpenRouter API key not configured'}), 400
+
+    photos = [dict(p) for p in db.execute(
+        'SELECT * FROM photos WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()]
+
+    if not photos:
+        return jsonify({'ok': False, 'error': 'No photos on this claim yet. Upload photos first so I can analyze them.'}), 400
+
+    # Run fresh vision analysis on all photos (up to 8)
+    photo_analyses = []
+    for photo in photos[:8]:
+        photo_path = os.path.join(UPLOAD_DIR, photo['filename'])
+        if not os.path.exists(photo_path):
+            continue
+        # Always re-run for analyze endpoint — we want fresh detailed descriptions
+        desc = ai_describe_photo_detailed(photo_path, key, model)
+        if desc:
+            label = photo.get('caption') or photo['filename']
+            photo_analyses.append({'label': label, 'description': desc, 'photo_id': photo['id']})
+            db.execute('UPDATE photos SET ai_description=? WHERE id=?', (desc, photo['id']))
+    db.commit()
+
+    if not photo_analyses:
+        return jsonify({'ok': False, 'error': 'Could not analyze photos. Check your OpenRouter API key in Settings.'}), 400
+
+    # Build structured analysis prompt
+    photos_text = '\n'.join(f'Photo [{p["label"]}]: {p["description"]}' for p in photo_analyses)
+
+    analysis_prompt = f"""You are a licensed flood damage adjuster analyzing photos of a flood-damaged property.
+
+Claim: {claim['claim_number']} | Client: {claim['client_name']} | Address: {claim['property_address']}
+Flood Date: {claim['flood_date']}
+
+PHOTO ANALYSES:
+{photos_text}
+
+Based ONLY on what you can see in these photos, provide a structured JSON response with your assessment.
+Return ONLY valid JSON, no other text:
+
+{{
+  "water_category": "1, 2, or 3 (3=floodwater/black water, 2=gray water, 1=clean)",
+  "water_class": "1, 2, 3, or 4 (4=hardwood/brick/specialty, 3=ceiling saturated, 2=full room walls, 1=floors only)",
+  "flood_source": "brief description of flood source visible in photos",
+  "water_depth_in": "estimated water depth in inches based on water lines visible, or empty string",
+  "cause_of_loss": "what caused the damage (e.g. Storm surge, Pipe burst, Roof leak, Rising floodwater)",
+  "property_type": "Single Family, Condo, Commercial, Mobile Home, or empty",
+  "damage_summary": "2-3 sentence professional summary of all damage visible across all photos",
+  "suggested_rooms": [
+    {{
+      "name": "room name",
+      "damage_notes": "what needs to be done in this room",
+      "line_items": [
+        {{"description": "work item", "quantity": number, "unit": "sf/lf/ea", "unit_cost": dollar_amount}}
+      ]
+    }}
+  ],
+  "recommended_field_updates": {{
+    "water_category": "value",
+    "water_class": "value",
+    "flood_source": "value",
+    "water_depth_in": "value or empty",
+    "cause_of_loss": "value",
+    "notes": "professional damage summary for claim notes"
+  }}
+}}"""
+
+    raw = call_openrouter([{'role': 'user', 'content': analysis_prompt}], model, key, max_tokens=2000)
+
+    # Parse JSON from response
+    import re as _re
+    json_match = _re.search(r'\{[\s\S]+\}', raw)
+    if not json_match:
+        return jsonify({'ok': False, 'error': 'AI returned non-JSON response', 'raw': raw[:300]}), 500
+
+    try:
+        analysis = json.loads(json_match.group(0))
+    except Exception:
+        return jsonify({'ok': False, 'error': 'Could not parse AI response as JSON', 'raw': raw[:300]}), 500
+
+    return jsonify({
+        'ok':             True,
+        'claim_id':       claim_id,
+        'claim_number':   claim['claim_number'],
+        'photos_analyzed': len(photo_analyses),
+        'analysis':       analysis,
+        'message':        f'Analyzed {len(photo_analyses)} photo(s). Use update_claim_fields to apply the recommendations.',
+    })
+
+
+def ai_describe_photo_detailed(image_path, key, model):
+    """Run vision AI on a photo with a detailed damage-focused prompt."""
+    try:
+        with open(image_path, 'rb') as f:
+            img_b64 = base64.b64encode(f.read()).decode()
+        ext  = image_path.rsplit('.', 1)[-1].lower()
+        mime = f'image/{ext}' if ext != 'jpg' else 'image/jpeg'
+        r = _req.post(
+            'https://openrouter.ai/api/v1/chat/completions',
+            headers={'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'},
+            json={
+                'model': model,
+                'messages': [{
+                    'role': 'user',
+                    'content': [
+                        {'type': 'text', 'text': (
+                            'You are a flood damage assessor. Describe ALL visible damage in this photo in detail. '
+                            'Include: what materials are damaged (drywall, flooring, ceiling, cabinets, etc.), '
+                            'the severity (minor/moderate/severe), visible water lines or staining, '
+                            'mold or mildew presence, structural concerns, and estimated affected square footage. '
+                            'Be specific and professional. 3-5 sentences.'
+                        )},
+                        {'type': 'image_url', 'image_url': {'url': f'data:{mime};base64,{img_b64}'}}
+                    ]
+                }],
+                'max_tokens': 300
+            }, timeout=30)
+        return r.json()['choices'][0]['message']['content']
+    except Exception:
+        return ''
+
+
 @app.route('/health')
 def health():
     return jsonify({'status': 'ok'})
