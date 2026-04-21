@@ -144,6 +144,10 @@
     <a href="{{ url_for('report', claim_id=claim.id) }}" class="btn btn-cyan btn-sm" target="_blank">📄 Report</a>
     <button class="btn btn-success btn-sm" onclick="runAIEstimate()">🤖 AI Estimate</button>
     <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-sm">← Back</a>
+    <form method="POST" action="{{ url_for('delete_claim', claim_id=claim.id) }}"
+          onsubmit="return confirm('Delete claim {{ claim.claim_number }} ({{ claim.client_name }})? This will permanently remove all rooms, photos, and line items.')">
+      <button type="submit" class="btn btn-danger btn-sm">🗑 Delete Claim</button>
+    </form>
   </div>
 </div>
 

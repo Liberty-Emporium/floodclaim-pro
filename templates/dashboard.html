@@ -65,7 +65,13 @@
         {% elif c.status == 'Closed' %}<span class="badge badge-closed">Closed</span>
         {% else %}<span class="badge">{{ c.status }}</span>{% endif %}
       </td>
-      <td><a href="{{ url_for('claim_detail', claim_id=c.id) }}" class="btn btn-ghost btn-sm">View →</a></td>
+      <td style="display:flex;gap:.4rem;align-items:center">
+        <a href="{{ url_for('claim_detail', claim_id=c.id) }}" class="btn btn-ghost btn-sm">View →</a>
+        <form method="POST" action="{{ url_for('delete_claim', claim_id=c.id) }}"
+              onsubmit="return confirm('Delete claim {{ c.claim_number }} ({{ c.client_name }})? This cannot be undone.')">
+          <button type="submit" class="btn btn-danger btn-sm" title="Delete claim">🗑</button>
+        </form>
+      </td>
     </tr>
     {% endfor %}
     </tbody>

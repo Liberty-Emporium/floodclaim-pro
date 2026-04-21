@@ -1193,6 +1193,30 @@ def new_claim():
                 if session['role'] == 'admin' else []
     return render_template('new_claim.html', adjusters=adjusters)
 
+@app.route('/claims/<int:claim_id>/delete', methods=['POST'])
+@login_required
+def delete_claim(claim_id):
+    """Delete a claim and all its rooms, line items, and photos."""
+    db = get_db()
+    claim = db.execute('SELECT id, client_name, claim_number FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim:
+        flash('Claim not found.', 'error')
+        return redirect(url_for('dashboard'))
+    # Delete uploaded photo files from disk
+    photos = db.execute('SELECT filename FROM photos WHERE claim_id=?', (claim_id,)).fetchall()
+    for p in photos:
+        try:
+            path = os.path.join(UPLOAD_DIR, p['filename'])
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception:
+            pass
+    db.execute('DELETE FROM claims WHERE id=?', (claim_id,))
+    db.commit()
+    flash(f'Claim {claim["claim_number"]} ({claim["client_name"]}) deleted.', 'success')
+    return redirect(url_for('dashboard'))
+
+
 @app.route('/claims/<int:claim_id>')
 @login_required
 def claim_detail(claim_id):
