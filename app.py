@@ -275,7 +275,7 @@ def migrate_new_features():
 migrate_new_features()
 
 
-# ── Integrations: FEMA, Maps, Email ───────────────────────────────────────────
+# ── Integrations: FEMA, Maps, Email (helpers only — routes defined after auth) ──
 
 def lookup_fema_flood_zone(address):
     """Look up FEMA flood zone for an address using FEMA's free API."""
@@ -337,230 +337,6 @@ def notify_client_status_change(claim, new_status):
         <p style="font-size:12px;color:#94a3b8">FloodClaim Pro · Professional Flood Damage Assessment</p>
     </div>'''
     send_email(claim['client_email'], subject, html)
-
-
-# ── PDF Export ────────────────────────────────────────────────────────────────
-@app.route('/claims/<int:claim_id>/report/pdf')
-@login_required
-def report_pdf(claim_id):
-    """PDF via browser print dialog — opens report in print mode."""
-    db = get_db()
-    claim = db.execute('''SELECT c.*, u.name as adjuster_name, u.email as adjuster_email
-        FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''', (claim_id,)).fetchone()
-    if not claim:
-        flash('Claim not found.', 'error')
-        return redirect(url_for('dashboard'))
-    rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
-    room_data = []
-    for room in rooms:
-        items  = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
-        photos = db.execute('SELECT * FROM photos WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
-        room_data.append({'room': room, 'items': items, 'photos': photos})
-    unassigned_photos = db.execute('SELECT * FROM photos WHERE claim_id=? AND room_id IS NULL', (claim_id,)).fetchall()
-    recalc_claim(claim_id)
-    claim = db.execute('''SELECT c.*, u.name as adjuster_name, u.email as adjuster_email
-        FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''', (claim_id,)).fetchone()
-    # Render print-optimized version that auto-triggers print dialog
-    return render_template('report.html', claim=claim, room_data=room_data,
-                           unassigned_photos=unassigned_photos, pdf_mode=True,
-                           auto_print=True,
-                           generated=datetime.datetime.now().strftime('%B %d, %Y %I:%M %p'))
-
-
-# ── Xactimate ESX Export ──────────────────────────────────────────────────────
-@app.route('/claims/<int:claim_id>/export/xactimate')
-@login_required
-def export_xactimate(claim_id):
-    """Export claim as Xactimate-compatible ESX (XML) file."""
-    db = get_db()
-    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
-    if not claim:
-        flash('Claim not found.', 'error')
-        return redirect(url_for('dashboard'))
-    rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
-    now = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-    lines = [
-        '<?xml version="1.0" encoding="UTF-8"?>',
-        '<XactimateEstimate version="1.0">',
-        f'  <ClaimInfo>',
-        f'    <ClaimNumber>{claim["claim_number"]}</ClaimNumber>',
-        f'    <InsuredName>{claim["client_name"]}</InsuredName>',
-        f'    <LossAddress>{claim["property_address"]}</LossAddress>',
-        f'    <DateOfLoss>{claim["flood_date"]}</DateOfLoss>',
-        f'    <InsuranceCompany>{claim["insurance_company"]}</InsuranceCompany>',
-        f'    <PolicyNumber>{claim["policy_number"]}</PolicyNumber>',
-        f'    <FloodZone>{claim["flood_zone"]}</FloodZone>',
-        f'    <TotalEstimate>{claim["total_estimate"]:.2f}</TotalEstimate>',
-        f'    <ExportDate>{now}</ExportDate>',
-        f'  </ClaimInfo>',
-        f'  <Rooms>',
-    ]
-    for room in rooms:
-        items = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
-        lines += [
-            f'    <Room>',
-            f'      <Name>{room["name"]}</Name>',
-            f'      <Subtotal>{room["subtotal"]:.2f}</Subtotal>',
-            f'      <LineItems>',
-        ]
-        for item in items:
-            lines += [
-                f'        <LineItem>',
-                f'          <Description>{item["description"]}</Description>',
-                f'          <Quantity>{item["quantity"]}</Quantity>',
-                f'          <Unit>{item["unit"]}</Unit>',
-                f'          <UnitCost>{item["unit_cost"]:.2f}</UnitCost>',
-                f'          <Total>{item["total"]:.2f}</Total>',
-                f'        </LineItem>',
-            ]
-        lines += ['      </LineItems>', '    </Room>']
-    lines += ['  </Rooms>', '</XactimateEstimate>']
-    xml = '\n'.join(lines)
-    resp = make_response(xml)
-    resp.headers['Content-Type'] = 'application/xml'
-    resp.headers['Content-Disposition'] = f'attachment; filename="{claim["claim_number"]}-xactimate.esx"'
-    return resp
-
-
-# ── FEMA Flood Zone Lookup ────────────────────────────────────────────────────
-@app.route('/claims/<int:claim_id>/fema-lookup', methods=['POST'])
-@login_required
-def fema_lookup(claim_id):
-    db = get_db()
-    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
-    if not claim:
-        return jsonify({'error': 'not found'}), 404
-    result = lookup_fema_flood_zone(claim['property_address'])
-    if result:
-        db.execute('''UPDATE claims SET flood_zone=?, fema_map_number=?, lat=?, lng=?, maps_embed_url=?
-                      WHERE id=?''',
-                   (result.get('flood_zone',''), result.get('fema_map_number',''),
-                    result.get('lat',0), result.get('lng',0),
-                    result.get('maps_embed_url',''), claim_id))
-        db.commit()
-    return jsonify({'ok': True, **result})
-
-
-# ── Client Portal ─────────────────────────────────────────────────────────────
-@app.route('/claims/<int:claim_id>/portal/generate', methods=['POST'])
-@login_required
-def generate_portal_link(claim_id):
-    """Generate a shareable client portal token for this claim."""
-    db = get_db()
-    token = secrets.token_urlsafe(24)
-    db.execute('DELETE FROM client_portal_tokens WHERE claim_id=?', (claim_id,))
-    db.execute('INSERT INTO client_portal_tokens (claim_id, token) VALUES (?,?)', (claim_id, token))
-    db.commit()
-    portal_url = url_for('client_portal', token=token, _external=True)
-    # Email the link to the client
-    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
-    if claim['client_email']:
-        subject = f'View Your Flood Damage Claim — {claim["claim_number"]}'
-        html = f'''<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-            <h2 style="color:#0a1628">Your Claim Portal</h2>
-            <p>Hello {claim["client_name"]},</p>
-            <p>Your adjuster has shared your flood damage claim report with you.</p>
-            <p><a href="{portal_url}" style="background:#0a1628;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;margin:16px 0">View My Claim ↗</a></p>
-            <p style="font-size:12px;color:#94a3b8">Claim: {claim["claim_number"]} · FloodClaim Pro</p>
-        </div>'''
-        send_email(claim['client_email'], subject, html)
-    return jsonify({'ok': True, 'portal_url': portal_url, 'token': token})
-
-
-@app.route('/portal/<token>')
-def client_portal(token):
-    """Public client portal — view claim status and report with just a token."""
-    db = get_db()
-    row = db.execute('SELECT claim_id FROM client_portal_tokens WHERE token=?', (token,)).fetchone()
-    if not row:
-        return render_template('portal_invalid.html'), 404
-    claim_id = row['claim_id']
-    claim = db.execute('''SELECT c.*, u.name as adjuster_name, u.email as adjuster_email
-        FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''', (claim_id,)).fetchone()
-    rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
-    room_data = []
-    for room in rooms:
-        items  = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
-        photos = db.execute('SELECT * FROM photos WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
-        room_data.append({'room': room, 'items': items, 'photos': photos})
-    return render_template('client_portal.html', claim=claim, room_data=room_data, token=token,
-                           generated=datetime.datetime.now().strftime('%B %d, %Y'))
-
-
-# ── Digital Signature ─────────────────────────────────────────────────────────
-@app.route('/claims/<int:claim_id>/sign', methods=['POST'])
-def sign_claim(claim_id):
-    """Save a digital signature for a claim (from client portal or adjuster)."""
-    data = request.get_json(silent=True) or {}
-    signer  = data.get('signer', 'Client').strip()
-    sig_data = data.get('sig_data', '').strip()  # base64 canvas data
-    if not sig_data:
-        return jsonify({'error': 'sig_data required'}), 400
-    db = get_db()
-    db.execute('DELETE FROM signatures WHERE claim_id=?', (claim_id,))
-    db.execute('INSERT INTO signatures (claim_id, signer, sig_data) VALUES (?,?,?)',
-               (claim_id, signer, sig_data))
-    db.commit()
-    return jsonify({'ok': True, 'message': f'Claim signed by {signer}'})
-
-
-@app.route('/claims/<int:claim_id>/signature')
-@login_required
-def get_signature(claim_id):
-    db = get_db()
-    sig = db.execute('SELECT * FROM signatures WHERE claim_id=? ORDER BY id DESC LIMIT 1', (claim_id,)).fetchone()
-    if not sig:
-        return jsonify({'signed': False})
-    return jsonify({'signed': True, 'signer': sig['signer'], 'signed_at': sig['signed_at']})
-
-
-# ── Stripe Subscriptions ──────────────────────────────────────────────────────
-@app.route('/billing')
-@login_required
-def billing():
-    sk = get_setting('stripe_secret_key') or os.environ.get('STRIPE_SECRET_KEY', '')
-    sub = None
-    if STRIPE_OK and sk:
-        try:
-            _stripe.api_key = sk
-            db = get_db()
-            row = db.execute('SELECT * FROM stripe_customers WHERE user_id=?', (session['user_id'],)).fetchone()
-            if row and row['stripe_sub_id']:
-                sub = _stripe.Subscription.retrieve(row['stripe_sub_id'])
-        except Exception:
-            pass
-    plans = [
-        {'id': 'basic',   'name': 'Basic',       'price': '$49/mo',  'claims': 25,  'features': ['25 claims/mo', 'PDF export', 'Willie AI', 'Client portal']},
-        {'id': 'pro',     'name': 'Pro',          'price': '$99/mo',  'claims': 100, 'features': ['100 claims/mo', 'Everything in Basic', 'Xactimate export', 'Priority support']},
-        {'id': 'agency',  'name': 'Agency',       'price': '$249/mo', 'claims': 999, 'features': ['Unlimited claims', 'Everything in Pro', 'Multi-adjuster team', 'White-label reports']},
-    ]
-    return render_template('billing.html', plans=plans, sub=sub)
-
-
-@app.route('/billing/checkout', methods=['POST'])
-@login_required
-def billing_checkout():
-    sk = get_setting('stripe_secret_key') or os.environ.get('STRIPE_SECRET_KEY', '')
-    if not STRIPE_OK or not sk:
-        flash('Stripe is not configured. Add STRIPE_SECRET_KEY to settings.', 'error')
-        return redirect(url_for('billing'))
-    price_ids = {'basic': 'price_basic', 'pro': 'price_pro', 'agency': 'price_agency'}
-    plan = request.form.get('plan', 'basic')
-    try:
-        _stripe.api_key = sk
-        checkout = _stripe.checkout.Session.create(
-            payment_method_types=['card'],
-            mode='subscription',
-            line_items=[{'price': price_ids.get(plan, 'price_basic'), 'quantity': 1}],
-            success_url=url_for('billing', _external=True) + '?success=1',
-            cancel_url=url_for('billing', _external=True),
-            metadata={'user_id': session['user_id'], 'plan': plan}
-        )
-        return redirect(checkout.url)
-    except Exception as e:
-        flash(f'Stripe error: {str(e)[:100]}', 'error')
-        return redirect(url_for('billing'))
-
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 def login_required(f):
@@ -632,6 +408,182 @@ def willie_auth():
     auth  = request.headers.get('Authorization', '')
     token = auth.replace('Bearer ', '').strip() if auth.startswith('Bearer ') else ''
     return bool(token and token == get_setting('willie_api_token'))
+
+
+# ── PDF Export ────────────────────────────────────────────────────────────────
+@app.route('/claims/<int:claim_id>/report/pdf')
+@login_required
+def report_pdf(claim_id):
+    db = get_db()
+    claim = db.execute('''SELECT c.*, u.name as adjuster_name, u.email as adjuster_email
+        FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''', (claim_id,)).fetchone()
+    if not claim:
+        flash('Claim not found.', 'error')
+        return redirect(url_for('dashboard'))
+    rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    room_data = []
+    for room in rooms:
+        items  = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
+        photos = db.execute('SELECT * FROM photos WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
+        room_data.append({'room': room, 'items': items, 'photos': photos})
+    unassigned_photos = db.execute('SELECT * FROM photos WHERE claim_id=? AND room_id IS NULL', (claim_id,)).fetchall()
+    recalc_claim(claim_id)
+    claim = db.execute('''SELECT c.*, u.name as adjuster_name, u.email as adjuster_email
+        FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''', (claim_id,)).fetchone()
+    return render_template('report.html', claim=claim, room_data=room_data,
+                           unassigned_photos=unassigned_photos, pdf_mode=True, auto_print=True,
+                           generated=datetime.datetime.now().strftime('%B %d, %Y %I:%M %p'))
+
+
+# ── Xactimate ESX Export ──────────────────────────────────────────────────────
+@app.route('/claims/<int:claim_id>/export/xactimate')
+@login_required
+def export_xactimate(claim_id):
+    db = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim:
+        flash('Claim not found.', 'error')
+        return redirect(url_for('dashboard'))
+    rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    now = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<XactimateEstimate version="1.0">',
+        '  <ClaimInfo>',
+        f'    <ClaimNumber>{claim["claim_number"]}</ClaimNumber>',
+        f'    <InsuredName>{claim["client_name"]}</InsuredName>',
+        f'    <LossAddress>{claim["property_address"]}</LossAddress>',
+        f'    <DateOfLoss>{claim["flood_date"]}</DateOfLoss>',
+        f'    <InsuranceCompany>{claim["insurance_company"]}</InsuranceCompany>',
+        f'    <PolicyNumber>{claim["policy_number"]}</PolicyNumber>',
+        f'    <FloodZone>{claim["flood_zone"]}</FloodZone>',
+        f'    <TotalEstimate>{claim["total_estimate"]:.2f}</TotalEstimate>',
+        f'    <ExportDate>{now}</ExportDate>',
+        '  </ClaimInfo>',
+        '  <Rooms>',
+    ]
+    for room in rooms:
+        items = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
+        lines += ['    <Room>', f'      <Name>{room["name"]}</Name>',
+                  f'      <Subtotal>{room["subtotal"]:.2f}</Subtotal>', '      <LineItems>']
+        for item in items:
+            lines += ['        <LineItem>',
+                      f'          <Description>{item["description"]}</Description>',
+                      f'          <Quantity>{item["quantity"]}</Quantity>',
+                      f'          <Unit>{item["unit"]}</Unit>',
+                      f'          <UnitCost>{item["unit_cost"]:.2f}</UnitCost>',
+                      f'          <Total>{item["total"]:.2f}</Total>',
+                      '        </LineItem>']
+        lines += ['      </LineItems>', '    </Room>']
+    lines += ['  </Rooms>', '</XactimateEstimate>']
+    resp = make_response('\n'.join(lines))
+    resp.headers['Content-Type'] = 'application/xml'
+    resp.headers['Content-Disposition'] = f'attachment; filename="{claim["claim_number"]}-xactimate.esx"'
+    return resp
+
+
+# ── FEMA Flood Zone Lookup ────────────────────────────────────────────────────
+@app.route('/claims/<int:claim_id>/fema-lookup', methods=['POST'])
+@login_required
+def fema_lookup(claim_id):
+    db = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim:
+        return jsonify({'error': 'not found'}), 404
+    result = lookup_fema_flood_zone(claim['property_address'])
+    if result:
+        db.execute('UPDATE claims SET flood_zone=?,fema_map_number=?,lat=?,lng=?,maps_embed_url=? WHERE id=?',
+                   (result.get('flood_zone',''), result.get('fema_map_number',''),
+                    result.get('lat',0), result.get('lng',0), result.get('maps_embed_url',''), claim_id))
+        db.commit()
+    return jsonify({'ok': True, **result})
+
+
+# ── Client Portal ─────────────────────────────────────────────────────────────
+@app.route('/claims/<int:claim_id>/portal/generate', methods=['POST'])
+@login_required
+def generate_portal_link(claim_id):
+    db = get_db()
+    token = secrets.token_urlsafe(24)
+    db.execute('DELETE FROM client_portal_tokens WHERE claim_id=?', (claim_id,))
+    db.execute('INSERT INTO client_portal_tokens (claim_id, token) VALUES (?,?)', (claim_id, token))
+    db.commit()
+    portal_url = url_for('client_portal', token=token, _external=True)
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if claim['client_email']:
+        subject = f'View Your Flood Damage Claim — {claim["claim_number"]}'
+        html = f'''<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+            <h2 style="color:#0a1628">Your Claim Portal</h2>
+            <p>Hello {claim["client_name"]},</p>
+            <p>Your adjuster has shared your flood damage claim with you.</p>
+            <p><a href="{portal_url}" style="background:#0a1628;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;margin:16px 0">View My Claim ↗</a></p>
+            <p style="font-size:12px;color:#94a3b8">Claim: {claim["claim_number"]} · FloodClaim Pro</p></div>'''
+        send_email(claim['client_email'], subject, html)
+    return jsonify({'ok': True, 'portal_url': portal_url, 'token': token})
+
+
+@app.route('/portal/<token>')
+def client_portal(token):
+    db = get_db()
+    row = db.execute('SELECT claim_id FROM client_portal_tokens WHERE token=?', (token,)).fetchone()
+    if not row:
+        return render_template('portal_invalid.html'), 404
+    claim_id = row['claim_id']
+    claim = db.execute('''SELECT c.*, u.name as adjuster_name, u.email as adjuster_email
+        FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''', (claim_id,)).fetchone()
+    rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    room_data = []
+    for room in rooms:
+        items  = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
+        photos = db.execute('SELECT * FROM photos WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
+        room_data.append({'room': room, 'items': items, 'photos': photos})
+    return render_template('client_portal.html', claim=claim, room_data=room_data, token=token,
+                           generated=datetime.datetime.now().strftime('%B %d, %Y'))
+
+
+# ── Digital Signature ─────────────────────────────────────────────────────────
+@app.route('/claims/<int:claim_id>/sign', methods=['POST'])
+def sign_claim(claim_id):
+    data = request.get_json(silent=True) or {}
+    signer   = data.get('signer', 'Client').strip()
+    sig_data = data.get('sig_data', '').strip()
+    if not sig_data:
+        return jsonify({'error': 'sig_data required'}), 400
+    db = get_db()
+    db.execute('DELETE FROM signatures WHERE claim_id=?', (claim_id,))
+    db.execute('INSERT INTO signatures (claim_id, signer, sig_data) VALUES (?,?,?)',
+               (claim_id, signer, sig_data))
+    db.commit()
+    return jsonify({'ok': True, 'message': f'Claim signed by {signer}'})
+
+
+@app.route('/claims/<int:claim_id>/signature')
+@login_required
+def get_signature(claim_id):
+    db = get_db()
+    sig = db.execute('SELECT * FROM signatures WHERE claim_id=? ORDER BY id DESC LIMIT 1', (claim_id,)).fetchone()
+    if not sig:
+        return jsonify({'signed': False})
+    return jsonify({'signed': True, 'signer': sig['signer'], 'signed_at': sig['signed_at']})
+
+
+# ── Stripe Subscriptions ──────────────────────────────────────────────────────
+@app.route('/billing')
+@login_required
+def billing():
+    plans = [
+        {'id': 'basic',  'name': 'Basic',  'price': '$49/mo',  'features': ['25 claims/mo', 'PDF export', 'Willie AI', 'Client portal']},
+        {'id': 'pro',    'name': 'Pro',    'price': '$99/mo',  'features': ['100 claims/mo', 'Everything in Basic', 'Xactimate export', 'Priority support']},
+        {'id': 'agency', 'name': 'Agency', 'price': '$249/mo', 'features': ['Unlimited claims', 'Everything in Pro', 'Multi-adjuster team', 'White-label reports']},
+    ]
+    return render_template('billing.html', plans=plans, sub=None)
+
+
+@app.route('/billing/checkout', methods=['POST'])
+@login_required
+def billing_checkout():
+    flash('Stripe integration coming soon — add STRIPE_SECRET_KEY in Settings to activate.', 'info')
+    return redirect(url_for('billing'))
 
 def ai_describe_photo(image_path):
     key = get_setting('openrouter_api_key') or OPENROUTER_KEY
