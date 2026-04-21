@@ -193,9 +193,14 @@
 
   {% for rd in room_data %}
   <div class="room-block">
-    <div class="room-header" onclick="toggleRoom('room-{{rd.room.id}}')">
+    <div class="room-header" onclick="toggleRoom('room-{{rd.room.id}}')" style="display:flex;align-items:center;justify-content:space-between">
       <span>🏠 {{ rd.room.name }}</span>
-      <span style="color:#10b981;font-size:.95rem">${{ "{:,.2f}".format(rd.room.subtotal) }} <span style="color:#94a3b8;font-size:.75rem;font-weight:400">▾</span></span>
+      <span style="display:flex;align-items:center;gap:.75rem">
+        <span style="color:#10b981;font-size:.95rem">${{ "{:,.2f}".format(rd.room.subtotal) }} <span style="color:#94a3b8;font-size:.75rem;font-weight:400">▾</span></span>
+        <form method="POST" action="{{ url_for('delete_room', room_id=rd.room.id) }}" onsubmit="return confirm('Delete room \'{{ rd.room.name }}\' and all its items? This cannot be undone.')" onclick="event.stopPropagation()">
+          <button type="submit" class="btn btn-danger btn-sm" style="padding:.2rem .5rem;font-size:.75rem" title="Delete room">🗑 Remove</button>
+        </form>
+      </span>
     </div>
     <div class="room-body" id="room-{{rd.room.id}}">
 

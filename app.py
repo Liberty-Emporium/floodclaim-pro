@@ -962,6 +962,21 @@ def add_room(claim_id):
         db.commit()
     return redirect(url_for('claim_detail', claim_id=claim_id))
 
+@app.route('/rooms/<int:room_id>/delete', methods=['POST'])
+@login_required
+def delete_room(room_id):
+    db   = get_db()
+    room = db.execute('SELECT * FROM rooms WHERE id=?', (room_id,)).fetchone()
+    if not room:
+        return redirect(url_for('dashboard'))
+    claim_id = room['claim_id']
+    # CASCADE in schema deletes line_items; unassign photos back to claim
+    db.execute('UPDATE photos SET room_id=NULL WHERE room_id=?', (room_id,))
+    db.execute('DELETE FROM rooms WHERE id=?', (room_id,))
+    db.commit()
+    recalc_claim(claim_id)
+    return redirect(url_for('claim_detail', claim_id=claim_id))
+
 @app.route('/rooms/<int:room_id>/item/add', methods=['POST'])
 @login_required
 def add_item(room_id):
