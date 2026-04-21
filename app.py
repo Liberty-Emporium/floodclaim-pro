@@ -1198,6 +1198,83 @@ def willie_list_claims():
     ''').fetchall()
     return jsonify({'ok': True, 'claims': [dict(c) for c in claims], 'count': len(claims)})
 
+@app.route('/willie/api/claims/lookup', methods=['GET'])
+def willie_lookup_claim():
+    """Look up a claim by claim_number (e.g. FC-202604-FBA7C7) or partial client name."""
+    if not willie_auth():
+        return jsonify({'error': 'unauthorized'}), 401
+    claim_number = request.args.get('claim_number', '').strip()
+    client_name  = request.args.get('client_name', '').strip()
+    db = get_db()
+    if claim_number:
+        claim = db.execute(
+            'SELECT c.*, u.name as adjuster_name FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.claim_number=?',
+            (claim_number,)).fetchone()
+        if not claim:
+            return jsonify({'ok': False, 'error': f'No claim found with number {claim_number}'}), 404
+        rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim['id'],)).fetchall()
+        room_data = []
+        for r in rooms:
+            items = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (r['id'],)).fetchall()
+            room_data.append({'room': dict(r), 'items': [dict(i) for i in items]})
+        return jsonify({'ok': True, 'claim': dict(claim), 'rooms': room_data})
+    elif client_name:
+        claims = db.execute(
+            'SELECT id, claim_number, client_name, status, total_estimate FROM claims WHERE client_name LIKE ? ORDER BY created_at DESC',
+            (f'%{client_name}%',)).fetchall()
+        return jsonify({'ok': True, 'claims': [dict(c) for c in claims], 'count': len(claims)})
+    return jsonify({'error': 'Provide claim_number or client_name as query param'}), 400
+
+
+@app.route('/willie/api/claims/<int:claim_id>/estimate', methods=['POST'])
+def willie_generate_estimate(claim_id):
+    """Use AI to generate a cost estimate for all rooms in the claim."""
+    if not willie_auth():
+        return jsonify({'error': 'unauthorized'}), 401
+    db = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim:
+        return jsonify({'error': 'Claim not found'}), 404
+    rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    if not rooms:
+        return jsonify({'error': 'No rooms found on this claim. Add rooms first.'}), 400
+
+    room_summary = []
+    for r in rooms:
+        items = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (r['id'],)).fetchall()
+        item_list = ', '.join([f"{i['description']} ({i['quantity']} {i['unit']} @ ${i['unit_cost']})" for i in items]) or 'No items yet'
+        room_summary.append(f"- {r['name']}: {item_list}")
+
+    prompt = f"""You are a professional flood damage estimator. Review this claim and provide a detailed cost estimate.
+
+Claim: {claim['claim_number']}
+Client: {claim['client_name']}
+Property: {claim['property_address']}
+Flood Date: {claim['flood_date']}
+Flood Source: {claim.get('flood_source') or 'Unknown'}
+Water Category: {claim.get('water_category') or 'Unknown'}
+Current Rooms & Line Items:
+{chr(10).join(room_summary)}
+
+Current Total: ${claim['total_estimate']:.2f}
+
+Please provide:
+1. A review of whether current line items look complete and reasonably priced
+2. Any missing line items you'd recommend adding (with estimated costs)
+3. A total estimate range for this type of damage
+4. Priority items to document or address first
+
+Be specific with dollar amounts. Use industry-standard rates for {claim.get('property_address', 'NC') }."""
+
+    key = get_setting('openrouter_api_key') or OPENROUTER_KEY
+    model = get_setting('ai_model') or 'openai/gpt-4o-mini'
+    if not key:
+        return jsonify({'error': 'OpenRouter API key not configured. Add it in Settings.'}), 400
+
+    estimate = call_openrouter([{'role':'user','content':prompt}], model, key)
+    return jsonify({'ok': True, 'claim_number': claim['claim_number'], 'current_total': claim['total_estimate'], 'estimate': estimate})
+
+
 @app.route('/willie/api/claims', methods=['POST'])
 def willie_create_claim():
     if not willie_auth():
