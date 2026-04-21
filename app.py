@@ -7,11 +7,7 @@ from werkzeug.utils import secure_filename
 import requests as _req
 
 # Optional deps — degrade gracefully if not installed yet
-try:
-    from weasyprint import HTML as WP_HTML
-    WEASYPRINT_OK = True
-except Exception:
-    WEASYPRINT_OK = False
+WEASYPRINT_OK = False  # Disabled — not compatible with Railway environment
 
 try:
     import stripe as _stripe
@@ -347,9 +343,7 @@ def notify_client_status_change(claim, new_status):
 @app.route('/claims/<int:claim_id>/report/pdf')
 @login_required
 def report_pdf(claim_id):
-    if not WEASYPRINT_OK:
-        flash('PDF export requires WeasyPrint. Install it on the server.', 'error')
-        return redirect(url_for('report', claim_id=claim_id))
+    """PDF via browser print dialog — opens report in print mode."""
     db = get_db()
     claim = db.execute('''SELECT c.*, u.name as adjuster_name, u.email as adjuster_email
         FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''', (claim_id,)).fetchone()
@@ -366,14 +360,11 @@ def report_pdf(claim_id):
     recalc_claim(claim_id)
     claim = db.execute('''SELECT c.*, u.name as adjuster_name, u.email as adjuster_email
         FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''', (claim_id,)).fetchone()
-    html = render_template('report.html', claim=claim, room_data=room_data,
+    # Render print-optimized version that auto-triggers print dialog
+    return render_template('report.html', claim=claim, room_data=room_data,
                            unassigned_photos=unassigned_photos, pdf_mode=True,
+                           auto_print=True,
                            generated=datetime.datetime.now().strftime('%B %d, %Y %I:%M %p'))
-    pdf_bytes = WP_HTML(string=html, base_url=request.host_url).write_pdf()
-    resp = make_response(pdf_bytes)
-    resp.headers['Content-Type'] = 'application/pdf'
-    resp.headers['Content-Disposition'] = f'attachment; filename="{claim["claim_number"]}-report.pdf"'
-    return resp
 
 
 # ── Xactimate ESX Export ──────────────────────────────────────────────────────

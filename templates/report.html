@@ -148,6 +148,7 @@ td{padding:.6rem .75rem;border-bottom:1px solid #f1f5f9}
   </div>
 </div>
 
+{% if auto_print %}<script>window.onload=function(){window.print();}</script>{% endif %}
 {% if not pdf_mode %}
 <div style="position:fixed;bottom:2rem;right:2rem;display:flex;flex-direction:column;gap:8px;z-index:100">
   <button onclick="window.print()" style="background:#1e40af;color:#fff;border:none;padding:.7rem 1.2rem;border-radius:8px;font-size:.85rem;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 4px 15px rgba(30,64,175,.4)">🖨️ Print</button>
