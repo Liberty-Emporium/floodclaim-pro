@@ -1503,6 +1503,25 @@ def willie_get_claim(claim_id):
         room_data.append({'room': dict(r), 'items': [dict(i) for i in items]})
     return jsonify({'ok': True, 'claim': dict(claim), 'rooms': room_data})
 
+@app.route('/willie/api/claims/by-number/<claim_number>', methods=['DELETE'])
+def willie_delete_claim_by_number(claim_number):
+    """Delete a claim by claim number (e.g. FC-202604-AF52D2) in one step."""
+    if not willie_auth():
+        return jsonify({'error': 'unauthorized'}), 401
+    db = get_db()
+    claim = db.execute('SELECT id, client_name, claim_number FROM claims WHERE claim_number=?', (claim_number,)).fetchone()
+    if not claim:
+        return jsonify({'ok': False, 'error': f'No claim found with number {claim_number}'}), 404
+    db.execute('DELETE FROM claims WHERE id=?', (claim['id'],))
+    db.commit()
+    # Verify it's gone
+    check = db.execute('SELECT id FROM claims WHERE id=?', (claim['id'],)).fetchone()
+    if check:
+        return jsonify({'ok': False, 'error': 'Delete failed — claim still exists'}), 500
+    remaining = db.execute('SELECT COUNT(*) as c FROM claims').fetchone()['c']
+    return jsonify({'ok': True, 'message': f'Claim {claim_number} ({claim["client_name"]}) permanently deleted. {remaining} claims remaining.', 'deleted_id': claim['id'], 'deleted_client': claim['client_name'], 'remaining_claims': remaining})
+
+
 @app.route('/willie/api/claims/<int:claim_id>', methods=['DELETE'])
 def willie_delete_claim(claim_id):
     if not willie_auth():
