@@ -480,8 +480,114 @@ def ai_estimate(claim_id):
             photo_analyses.append(f"  [{label}]: {desc}")
     photo_section = '\n'.join(photo_analyses) if photo_analyses else '  No photos uploaded yet.'
 
+    PRICING_KNOWLEDGE_BASE = """
+=== 2026 FLOOD RESTORATION PRICING REFERENCE (USE THESE RATES) ===
+
+NATIONAL AVERAGES (2026 data — Palm Build, NuBilt, Angi, Xactimate):
+- Average water damage claim payout: $10,234–$11,605
+- Typical full restoration (mitigation + rebuild): $5,000–$16,000
+- Per sq ft mitigation only: $3.00–$7.50/sf
+- Per sq ft full rebuild: $20.00–$37.00/sf
+- Myrtle Beach / South Carolina local rate: $14–$16/sf (cleanup), $20–$30/sf (rebuild)
+- 1 inch of standing floodwater → ~$25,000 in damage to a typical home (FEMA/NFIP data)
+
+WATER CATEGORIES (IICRC):
+- Cat 1 (clean water): $3.50/sf mitigation
+- Cat 2 (gray water/appliance): $5.25/sf mitigation
+- Cat 3 (black water/floodwater/sewage): $7.50/sf mitigation + biohazard uplift
+  → Flood water from outside IS always Cat 3
+
+WATER CLASSES:
+- Class 1 (partial room, floors only): 24–48h dry-out
+- Class 2 (full room, walls <24" wicking): 48–72h dry-out
+- Class 3 (ceiling/walls saturated): 72–96h dry-out
+- Class 4 (specialty — brick, hardwood, concrete): 120h+ dry-out
+
+MITIGATION LINE ITEMS (Xactimate-based 2024–2026):
+- Emergency service call (business hours): $271–$407 EA
+- Water extraction / pumping: $0.75–$1.50/sf
+- Air mover (per 24h): $38–$55 EA (typically 1 per 50–100 sf)
+- Dehumidifier 70–109 ppd (per 24h): $83–$110 EA (typically 1 per 500–1,000 sf)
+- Wall cavity drying — injection type (per 24h): $141 EA
+- Antimicrobial treatment: $0.35–$0.50/sf
+- Moisture mapping report: $250 flat
+- Containment barriers: $0.18/sf
+- Content manipulation / pack-out: $77/hr
+- Debris hauling (dumpster): $350–$600 EA
+
+DEMOLITION / TEAR-OUT:
+- Tear out wet drywall Cat 3 (no bagging): $1.79/sf
+- Tear out wet insulation (no bagging): $0.91/sf
+- Tear out baseboard: $0.66/lf
+- Tear out carpet + pad: $1.05–$1.50/sy (or $0.12–$0.17/sf)
+- Tear out LVP/vinyl flooring: $1.25–$2.00/sf
+- Tear out non-salvageable hardwood (bagged): $5.82/sf
+- Tear out ceramic tile + mortar bed: $3.50–$5.00/sf
+- Tear out subfloor (OSB/plywood): $2.00–$3.50/sf
+
+DRYWALL REPLACEMENT:
+- 1/2" drywall hung, taped, floated, ready for paint: $3.99–$5.50/sf
+- Drywall repair (labor only, Myrtle Beach): $40–$60/hr
+- Batt insulation 6" R19: $1.40–$2.00/sf
+- Seal/prime + 2 coats paint walls: $1.50–$2.50/sf
+- Baseboard 4-1/4" R&R: $5.51/lf
+- Seal & paint baseboard: $2.75/lf
+
+FLOORING REPLACEMENT:
+- Luxury Vinyl Plank (LVP) installed: $4.00–$8.00/sf (mid-grade $5.50)
+- Carpet + pad installed: $3.50–$6.50/sf (mid-grade $4.50)
+- Hardwood installed (mid-grade): $8.00–$14.00/sf
+- Ceramic/porcelain tile installed: $7.00–$12.00/sf
+- Subfloor OSB 3/4" R&R: $4.50–$6.00/sf
+
+MOLD REMEDIATION:
+- HEPA air scrubber (per 24h): $80–$115 EA
+- Antimicrobial application: $0.35–$0.75/sf
+- Mold remediation (contained area): $1,200–$3,800 total; $15–$30/sf for large areas
+- Encapsulation coating: $1.00–$2.50/sf
+
+ELECTRICAL / MECHANICAL:
+- Electrical safety re-inspection after flood: $150–$400
+- GFCI outlet R&R: $85–$150 EA
+- Electrical outlet/switch R&R (standard): $45–$90 EA
+
+CABINETS / KITCHEN:
+- Base cabinet removal & replace (per LF): $175–$350/lf
+- Upper cabinet removal & replace (per LF): $125–$250/lf
+- Countertop replace (laminate): $25–$40/lf
+
+DOORS / WINDOWS:
+- Interior door unit R&R: $401–$550 EA
+- Vinyl window single-hung 9–12 sf R&R: $392–$550 EA
+- Door frame/jamb R&R: $254–$350 EA
+
+CONTINGENCY & OVERHEAD:
+- Standard contingency: 10–15% of subtotal
+- Contractor O&P (overhead & profit): 20% on top of labor + materials (standard insurance practice)
+- Sales tax on materials: ~8% (SC rate)
+
+AVERAGE TOTAL COSTS BY CLAIM TYPE (2026 insurance data):
+- Single room flood (200–400 sf): $8,000–$18,000
+- Two-room flood: $15,000–$30,000
+- Full first-floor flood (1,000–1,500 sf): $25,000–$60,000
+- Basement flood: $10,000–$30,000
+- NFIP average payout for flood claims: $66,000 (severe) / $10,234 (moderate)
+
+KEY RULES FOR ADJUSTER ESTIMATES:
+1. NEVER estimate below $8,000 for any claim showing visible drywall damage + flooring damage in 2+ photos
+2. Flood water from outside = Cat 3 black water ALWAYS — this triggers biohazard protocols and higher rates
+3. Any peeling paint/drywall visible in photos = walls need full replacement, not patch repair
+4. Rotted/torn flooring visible = full room flooring replacement, not partial
+5. Always include mitigation phase (extraction/drying) AND reconstruction phase in estimate
+6. Add 10% contingency + 20% O&P to all estimates
+7. If mold risk present (damage >48h old), add mold remediation line items
+"""
+
     prompt = f"""You are a licensed public adjuster and flood damage estimator with 20 years of experience.
 Analyze this flood damage claim and produce a complete, professional estimate like you would submit to an insurance company.
+
+You have access to a current 2026 pricing reference — USE THESE EXACT RATES, do not guess or use outdated numbers:
+{PRICING_KNOWLEDGE_BASE}
 
 === CLAIM DETAILS ===
 Claim #: {claim['claim_number']}
@@ -506,23 +612,25 @@ Current Documented Total: ${claim['total_estimate']:.2f}
 As a professional adjuster, provide:
 
 1. 📸 PHOTO FINDINGS
-What specific damage is visible in each photo? (water lines, mold, structural, flooring, drywall, etc.)
+Describe specific damage visible in each photo (water lines, peeling drywall, rotted flooring, mold, structural damage, etc.). Note the water category and class implied by what you see.
 
 2. 📊 COMPLETE LINE-ITEM ESTIMATE
-List every repair needed:
+Using the pricing reference above, list EVERY repair needed — both mitigation phase and reconstruction phase:
 | Item | Qty | Unit | Unit Cost | Total |
 Mark existing items ✅ and new recommended items ➕
+Do NOT omit standard line items like drying equipment, antimicrobial treatment, debris removal.
 
 3. 💰 ESTIMATE SUMMARY
 - Subtotal per room
-- Grand Total
+- Contractor O&P (20%)
+- Sales tax on materials (~8%)
 - 10% contingency
-- Recommended claim amount
+- GRAND TOTAL (recommended claim amount)
 
 4. ⚠️ ADJUSTER NOTES
-Documentation gaps, red flags, items insurance may dispute, and what to photograph next.
+Documentation gaps, red flags, items insurance may dispute, additional photos needed, and whether the current estimate of ${claim['total_estimate']:.2f} is adequate.
 
-Use current market rates for {claim.get('property_address', 'North Carolina')}. Be thorough and professional."""
+Be thorough — this goes directly to the insurance company. Low estimates hurt the homeowner."""
 
     estimate = call_openrouter([{'role': 'user', 'content': prompt}], model, key)
     return jsonify({
@@ -1461,8 +1569,114 @@ def willie_generate_estimate(claim_id):
     photo_section = '\n'.join(photo_analyses) if photo_analyses else 'No photos uploaded yet.'
     room_section  = '\n'.join(room_summary) if room_summary else 'No rooms documented yet.'
 
+    PRICING_KNOWLEDGE_BASE = """
+=== 2026 FLOOD RESTORATION PRICING REFERENCE (USE THESE RATES) ===
+
+NATIONAL AVERAGES (2026 data — Palm Build, NuBilt, Angi, Xactimate):
+- Average water damage claim payout: $10,234–$11,605
+- Typical full restoration (mitigation + rebuild): $5,000–$16,000
+- Per sq ft mitigation only: $3.00–$7.50/sf
+- Per sq ft full rebuild: $20.00–$37.00/sf
+- Myrtle Beach / South Carolina local rate: $14–$16/sf (cleanup), $20–$30/sf (rebuild)
+- 1 inch of standing floodwater → ~$25,000 in damage to a typical home (FEMA/NFIP data)
+
+WATER CATEGORIES (IICRC):
+- Cat 1 (clean water): $3.50/sf mitigation
+- Cat 2 (gray water/appliance): $5.25/sf mitigation
+- Cat 3 (black water/floodwater/sewage): $7.50/sf mitigation + biohazard uplift
+  → Flood water from outside IS always Cat 3
+
+WATER CLASSES:
+- Class 1 (partial room, floors only): 24–48h dry-out
+- Class 2 (full room, walls <24" wicking): 48–72h dry-out
+- Class 3 (ceiling/walls saturated): 72–96h dry-out
+- Class 4 (specialty — brick, hardwood, concrete): 120h+ dry-out
+
+MITIGATION LINE ITEMS (Xactimate-based 2024–2026):
+- Emergency service call (business hours): $271–$407 EA
+- Water extraction / pumping: $0.75–$1.50/sf
+- Air mover (per 24h): $38–$55 EA (typically 1 per 50–100 sf)
+- Dehumidifier 70–109 ppd (per 24h): $83–$110 EA (typically 1 per 500–1,000 sf)
+- Wall cavity drying — injection type (per 24h): $141 EA
+- Antimicrobial treatment: $0.35–$0.50/sf
+- Moisture mapping report: $250 flat
+- Containment barriers: $0.18/sf
+- Content manipulation / pack-out: $77/hr
+- Debris hauling (dumpster): $350–$600 EA
+
+DEMOLITION / TEAR-OUT:
+- Tear out wet drywall Cat 3 (no bagging): $1.79/sf
+- Tear out wet insulation (no bagging): $0.91/sf
+- Tear out baseboard: $0.66/lf
+- Tear out carpet + pad: $1.05–$1.50/sy (or $0.12–$0.17/sf)
+- Tear out LVP/vinyl flooring: $1.25–$2.00/sf
+- Tear out non-salvageable hardwood (bagged): $5.82/sf
+- Tear out ceramic tile + mortar bed: $3.50–$5.00/sf
+- Tear out subfloor (OSB/plywood): $2.00–$3.50/sf
+
+DRYWALL REPLACEMENT:
+- 1/2" drywall hung, taped, floated, ready for paint: $3.99–$5.50/sf
+- Drywall repair (labor only, Myrtle Beach): $40–$60/hr
+- Batt insulation 6" R19: $1.40–$2.00/sf
+- Seal/prime + 2 coats paint walls: $1.50–$2.50/sf
+- Baseboard 4-1/4" R&R: $5.51/lf
+- Seal & paint baseboard: $2.75/lf
+
+FLOORING REPLACEMENT:
+- Luxury Vinyl Plank (LVP) installed: $4.00–$8.00/sf (mid-grade $5.50)
+- Carpet + pad installed: $3.50–$6.50/sf (mid-grade $4.50)
+- Hardwood installed (mid-grade): $8.00–$14.00/sf
+- Ceramic/porcelain tile installed: $7.00–$12.00/sf
+- Subfloor OSB 3/4" R&R: $4.50–$6.00/sf
+
+MOLD REMEDIATION:
+- HEPA air scrubber (per 24h): $80–$115 EA
+- Antimicrobial application: $0.35–$0.75/sf
+- Mold remediation (contained area): $1,200–$3,800 total; $15–$30/sf for large areas
+- Encapsulation coating: $1.00–$2.50/sf
+
+ELECTRICAL / MECHANICAL:
+- Electrical safety re-inspection after flood: $150–$400
+- GFCI outlet R&R: $85–$150 EA
+- Electrical outlet/switch R&R (standard): $45–$90 EA
+
+CABINETS / KITCHEN:
+- Base cabinet removal & replace (per LF): $175–$350/lf
+- Upper cabinet removal & replace (per LF): $125–$250/lf
+- Countertop replace (laminate): $25–$40/lf
+
+DOORS / WINDOWS:
+- Interior door unit R&R: $401–$550 EA
+- Vinyl window single-hung 9–12 sf R&R: $392–$550 EA
+- Door frame/jamb R&R: $254–$350 EA
+
+CONTINGENCY & OVERHEAD:
+- Standard contingency: 10–15% of subtotal
+- Contractor O&P (overhead & profit): 20% on top of labor + materials (standard insurance practice)
+- Sales tax on materials: ~8% (SC rate)
+
+AVERAGE TOTAL COSTS BY CLAIM TYPE (2026 insurance data):
+- Single room flood (200–400 sf): $8,000–$18,000
+- Two-room flood: $15,000–$30,000
+- Full first-floor flood (1,000–1,500 sf): $25,000–$60,000
+- Basement flood: $10,000–$30,000
+- NFIP average payout for flood claims: $66,000 (severe) / $10,234 (moderate)
+
+KEY RULES FOR ADJUSTER ESTIMATES:
+1. NEVER estimate below $8,000 for any claim showing visible drywall damage + flooring damage in 2+ photos
+2. Flood water from outside = Cat 3 black water ALWAYS — this triggers biohazard protocols and higher rates
+3. Any peeling paint/drywall visible in photos = walls need full replacement, not patch repair
+4. Rotted/torn flooring visible = full room flooring replacement, not partial
+5. Always include mitigation phase (extraction/drying) AND reconstruction phase in estimate
+6. Add 10% contingency + 20% O&P to all estimates
+7. If mold risk present (damage >48h old), add mold remediation line items
+"""
+
     prompt = f"""You are a licensed public adjuster and flood damage estimator with 20 years of experience.
 Analyze this flood damage claim and produce a complete professional estimate like you would submit to an insurance company.
+
+You have access to a current 2026 pricing reference — USE THESE EXACT RATES, do not guess or use outdated numbers:
+{PRICING_KNOWLEDGE_BASE}
 
 === CLAIM DETAILS ===
 Claim #: {claim['claim_number']}
@@ -1487,24 +1701,26 @@ Current Total: ${claim['total_estimate']:.2f}
 === YOUR TASK ===
 Based on the photos, claim details, and current line items, provide:
 
-1. **PHOTO FINDINGS** — What damage did you observe in each photo? Be specific (water staining, mold, structural damage, flooring damage, etc.)
+1. **PHOTO FINDINGS** — What damage did you observe in each photo? Be specific (water staining, mold, structural damage, flooring damage, etc.). Note water category/class implied by the damage.
 
-2. **COMPLETE LINE-ITEM ESTIMATE** — List every repair item needed with:
+2. **COMPLETE LINE-ITEM ESTIMATE** — Using the pricing reference above, list EVERY repair needed — both mitigation phase and reconstruction phase:
    - Description
    - Quantity + Unit (sq ft, ln ft, ea, hr)
-   - Unit Cost
+   - Unit Cost (from the pricing reference above)
    - Line Total
    Mark items already documented with ✅, missing items with ➕
+   Do NOT omit drying equipment, antimicrobial treatment, or debris removal.
 
 3. **ESTIMATE SUMMARY**
    - Subtotal by room
-   - Grand Total
-   - Suggested contingency (10-15%)
-   - Final recommended claim amount
+   - Contractor O&P (20%)
+   - Sales tax on materials (~8%)
+   - 10% contingency
+   - GRAND TOTAL (recommended claim amount)
 
-4. **ADJUSTER NOTES** — Any red flags, documentation gaps, or items the insurance company will likely scrutinize.
+4. **ADJUSTER NOTES** — Red flags, documentation gaps, items insurance will scrutinize, and whether the current estimate of ${claim['total_estimate']:.2f} is adequate.
 
-Use current market rates for the {claim.get('property_address', 'southeastern US')} area. Be thorough — this goes to the insurance company."""
+Be thorough — this goes directly to the insurance company. Low estimates hurt the homeowner."""
 
     estimate = call_openrouter([{'role': 'user', 'content': prompt}], model, key)
     return jsonify({
