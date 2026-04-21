@@ -412,9 +412,13 @@ def willie_auth():
 
 # ── AI Adjuster Estimate (UI) ───────────────────────────────────────────────────
 @app.route('/claims/<int:claim_id>/ai-estimate', methods=['POST'])
-@login_required
 def ai_estimate(claim_id):
-    """Generate a full AI adjuster estimate — analyzes photos + line items."""
+    """Generate a full AI adjuster estimate — analyzes photos + line items.
+    Accepts session login OR Willie API token for cross-origin requests."""
+    # Allow Willie token auth as fallback for cross-origin requests
+    if not session.get('user_id'):
+        if not willie_auth():
+            return redirect(url_for('login'))
     db = get_db()
     claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
     if not claim:
@@ -504,6 +508,25 @@ Use current market rates for {claim.get('property_address', 'North Carolina')}. 
         'photos_analyzed': len(photo_analyses),
         'estimate': estimate
     })
+
+
+@app.route('/claims/<int:claim_id>/update-estimate', methods=['POST'])
+def update_claim_estimate(claim_id):
+    """Update total_estimate from AI adjuster result. Accepts session or Willie token."""
+    if not session.get('user_id') and not willie_auth():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    data = request.get_json(silent=True) or {}
+    total = data.get('total_estimate')
+    if total is None:
+        return jsonify({'ok': False, 'error': 'total_estimate required'}), 400
+    try:
+        total = float(total)
+    except (ValueError, TypeError):
+        return jsonify({'ok': False, 'error': 'Invalid total'}), 400
+    db = get_db()
+    db.execute('UPDATE claims SET total_estimate=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', (total, claim_id))
+    db.commit()
+    return jsonify({'ok': True, 'total_estimate': total})
 
 
 # ── PDF Export ────────────────────────────────────────────────────────────────
