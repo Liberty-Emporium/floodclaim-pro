@@ -465,7 +465,7 @@ def ai_estimate(claim_id):
         room_section = '  No rooms documented yet.\n'
 
     # Analyze photos (use cached AI descriptions or run fresh)
-    photos = db.execute('SELECT * FROM photos WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    photos = [dict(p) for p in db.execute('SELECT * FROM photos WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()]
     photo_analyses = []
     for photo in photos[:8]:
         photo_path = os.path.join(UPLOAD_DIR, photo['filename'])
@@ -636,6 +636,7 @@ def fema_lookup(claim_id):
         return jsonify({'error': 'not found'}), 404
     result = lookup_fema_flood_zone(claim['property_address'])
     if result:
+        result = dict(result) if not isinstance(result, dict) else result
         db.execute('UPDATE claims SET flood_zone=?,fema_map_number=?,lat=?,lng=?,maps_embed_url=? WHERE id=?',
                    (result.get('flood_zone',''), result.get('fema_map_number',''),
                     result.get('lat',0), result.get('lng',0), result.get('maps_embed_url',''), claim_id))
@@ -1301,7 +1302,7 @@ def willie_chat():
         req = _req.post(f'{WIDGET_BASE}/chat/{WILLIE_AGENT_ID}',
                         headers={'Content-Type': 'application/json'},
                         data=payload, timeout=30)
-        result  = req.json()
+        result  = req.json()  # req.json() returns a dict — .get() is safe here
         reply   = result.get('reply', 'Willie is unavailable right now.')
     except Exception as e:
         reply = f'Willie is unavailable right now. ({str(e)[:60]})'
@@ -1408,7 +1409,7 @@ def willie_lookup_claim():
         room_data = []
         for r in rooms:
             items = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (r['id'],)).fetchall()
-            room_data.append({'room': dict(r), 'items': [dict(i) for i in items]})
+            room_data.append({'room': dict(r), 'line_items': [dict(i) for i in items]})
         return jsonify({'ok': True, 'claim': dict(claim), 'rooms': room_data})
     elif client_name:
         claims = db.execute(
@@ -1570,7 +1571,7 @@ def willie_get_claim(claim_id):
     room_data = []
     for r in rooms:
         items = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (r['id'],)).fetchall()
-        room_data.append({'room': dict(r), 'items': [dict(i) for i in items]})
+        room_data.append({'room': dict(r), 'line_items': [dict(i) for i in items]})
     return jsonify({'ok': True, 'claim': dict(claim), 'rooms': room_data})
 
 @app.route('/willie/api/claims/by-number/<claim_number>', methods=['DELETE'])
