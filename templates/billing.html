@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block title %}Billing & Plans — FloodClaim Pro{% endblock %}
+{% block content %}
+<div style="max-width:900px;margin:0 auto;padding:2rem">
+  <h2 style="font-size:1.4rem;font-weight:800;margin-bottom:.5rem">💳 Billing & Plans</h2>
+  <p style="color:#64748b;margin-bottom:2rem">Choose the plan that fits your business</p>
+
+  {% if sub %}
+  <div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:10px;padding:1rem 1.5rem;margin-bottom:2rem">
+    <strong style="color:#065f46">✅ Active Subscription</strong>
+    <span style="color:#047857;margin-left:1rem">{{ sub.plan.id if sub.plan else 'Unknown' }} · {{ sub.status }}</span>
+  </div>
+  {% endif %}
+
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem">
+  {% for plan in plans %}
+  <div style="background:#fff;border:2px solid {% if plan.id == 'pro' %}#6366f1{% else %}#e2e8f0{% endif %};border-radius:14px;padding:1.5rem;position:relative">
+    {% if plan.id == 'pro' %}<div style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:#6366f1;color:#fff;font-size:.7rem;font-weight:700;padding:3px 12px;border-radius:20px">MOST POPULAR</div>{% endif %}
+    <div style="font-size:1.1rem;font-weight:800;margin-bottom:.25rem">{{ plan.name }}</div>
+    <div style="font-size:2rem;font-weight:800;color:#0a1628;margin-bottom:1rem">{{ plan.price }}</div>
+    <ul style="list-style:none;margin-bottom:1.5rem;display:flex;flex-direction:column;gap:.5rem">
+      {% for f in plan.features %}
+      <li style="font-size:.85rem;color:#475569">✅ {{ f }}</li>
+      {% endfor %}
+    </ul>
+    <form method="POST" action="/billing/checkout">
+      <input type="hidden" name="plan" value="{{ plan.id }}">
+      <button type="submit" style="width:100%;background:{% if plan.id == 'pro' %}#6366f1{% else %}#0a1628{% endif %};color:#fff;border:none;padding:.75rem;border-radius:8px;font-size:.9rem;font-weight:700;cursor:pointer">Get Started →</button>
+    </form>
+  </div>
+  {% endfor %}
+  </div>
+
+  <div style="margin-top:2rem;background:#f8fafc;border-radius:10px;padding:1.25rem;font-size:.82rem;color:#64748b">
+    <strong>🔐 Secure payments via Stripe.</strong> Cancel anytime. To configure Stripe, add your <code>STRIPE_SECRET_KEY</code> in <a href="/admin/settings">Settings</a>.
+  </div>
+</div>
+{% endblock %}

@@ -66,6 +66,7 @@ td{padding:.6rem .75rem;border-bottom:1px solid #f1f5f9}
       <div class="info-row"><label>Flood Date:</label> {{ claim.flood_date }}</div>
       <div class="info-row"><label>Insurance Co.:</label> {{ claim.insurance_company or '—' }}</div>
       <div class="info-row"><label>Policy Number:</label> {{ claim.policy_number or '—' }}</div>
+      {% if claim.flood_zone %}<div class="info-row"><label>FEMA Flood Zone:</label> <strong>{{ claim.flood_zone }}</strong>{% if claim.fema_map_number %} (Map: {{ claim.fema_map_number }}){% endif %}</div>{% endif %}
     </div>
   </div>
 </div>
@@ -147,6 +148,31 @@ td{padding:.6rem .75rem;border-bottom:1px solid #f1f5f9}
   </div>
 </div>
 
-<button class="print-btn" onclick="window.print()">🖨️ Print / Save PDF</button>
+{% if not pdf_mode %}
+<div style="position:fixed;bottom:2rem;right:2rem;display:flex;flex-direction:column;gap:8px;z-index:100">
+  <button onclick="window.print()" style="background:#1e40af;color:#fff;border:none;padding:.7rem 1.2rem;border-radius:8px;font-size:.85rem;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 4px 15px rgba(30,64,175,.4)">🖨️ Print</button>
+  <a href="/claims/{{ claim.id }}/report/pdf" style="background:#0a1628;color:#fff;border:none;padding:.7rem 1.2rem;border-radius:8px;font-size:.85rem;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:none;text-align:center;box-shadow:0 4px 15px rgba(0,0,0,.3)">📄 Download PDF</a>
+  <a href="/claims/{{ claim.id }}/export/xactimate" style="background:#06b6d4;color:#fff;border:none;padding:.7rem 1.2rem;border-radius:8px;font-size:.85rem;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:none;text-align:center;box-shadow:0 4px 15px rgba(6,182,212,.4)">📊 Xactimate Export</a>
+  <button onclick="femaLookup()" style="background:#10b981;color:#fff;border:none;padding:.7rem 1.2rem;border-radius:8px;font-size:.85rem;font-weight:700;cursor:pointer;font-family:inherit">🗺️ FEMA Lookup</button>
+  <button onclick="genPortal()" style="background:#8b5cf6;color:#fff;border:none;padding:.7rem 1.2rem;border-radius:8px;font-size:.85rem;font-weight:700;cursor:pointer;font-family:inherit">🔗 Client Portal</button>
+</div>
+<script>
+function femaLookup() {
+  fetch('/claims/{{ claim.id }}/fema-lookup', {method:'POST'})
+    .then(r=>r.json()).then(d=>{
+      if(d.ok) alert('FEMA Flood Zone: ' + d.flood_zone + '\nMap #: ' + (d.fema_map_number||'N/A') + '\nPage will reload.');
+      else alert('Lookup failed: ' + (d.error||'unknown'));
+      if(d.ok) location.reload();
+    });
+}
+function genPortal() {
+  fetch('/claims/{{ claim.id }}/portal/generate', {method:'POST'})
+    .then(r=>r.json()).then(d=>{
+      if(d.ok) { prompt('Client portal link (copy and share):', d.portal_url); }
+      else alert('Error: ' + (d.error||'unknown'));
+    });
+}
+</script>
+{% endif %}
 </body>
 </html>

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Your Claim — {{ claim.claim_number }}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8fafc;color:#1e293b;padding:0}
+.header{background:#0a1628;color:#fff;padding:1.5rem 2rem;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:1.4rem;font-weight:800}.header h1 span{color:#06b6d4}
+.header p{font-size:.82rem;opacity:.7;margin-top:.2rem}
+.badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:.75rem;font-weight:700}
+.badge-new{background:#dbeafe;color:#1d4ed8}.badge-progress{background:#fef3c7;color:#d97706}
+.badge-submitted{background:#d1fae5;color:#065f46}.badge-closed{background:#f1f5f9;color:#64748b}
+.container{max-width:900px;margin:0 auto;padding:2rem}
+.claim-card{background:#fff;border-radius:12px;border:1px solid #e2e8f0;padding:1.5rem;margin-bottom:1.5rem}
+.section-title{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#06b6d4;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid #f1f5f9}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem 2rem}
+.info-row{display:flex;gap:.5rem;font-size:.875rem;padding:.3rem 0}
+.info-row label{font-weight:600;color:#64748b;min-width:130px;flex-shrink:0}
+.room-block{border:1px solid #e2e8f0;border-radius:8px;margin-bottom:1rem;overflow:hidden}
+.room-header{background:#f8fafc;padding:.75rem 1rem;font-weight:700;font-size:.9rem;display:flex;justify-content:space-between}
+.room-body{padding:1rem}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th{text-align:left;padding:.5rem;font-size:.7rem;font-weight:700;text-transform:uppercase;color:#94a3b8;border-bottom:1px solid #e2e8f0}
+td{padding:.5rem;border-bottom:1px solid #f8fafc}
+.total-row td{font-weight:700;color:#10b981;border-top:2px solid #e2e8f0}
+.grand-total{background:#0a1628;color:#fff;border-radius:10px;padding:1.25rem 1.5rem;display:flex;justify-content:space-between;align-items:center}
+.grand-total .label{font-size:.85rem;opacity:.7}.grand-total .amount{font-size:1.8rem;font-weight:800;color:#10b981}
+.sig-section{background:#fff;border-radius:12px;border:1px solid #e2e8f0;padding:1.5rem;margin-top:1.5rem}
+#sig-canvas{border:2px dashed #cbd5e1;border-radius:8px;cursor:crosshair;width:100%;height:150px;display:block}
+.btn{padding:10px 20px;border-radius:8px;font-weight:600;font-size:.85rem;cursor:pointer;border:none;font-family:inherit}
+.btn-primary{background:#0a1628;color:#fff}.btn-ghost{background:transparent;border:1px solid #cbd5e1;color:#64748b;margin-left:8px}
+.status-bar{background:#fff;border-radius:12px;border:1px solid #e2e8f0;padding:1.25rem 1.5rem;margin-bottom:1.5rem;display:flex;align-items:center;gap:1rem}
+.status-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.dot-new{background:#3b82f6}.dot-progress{background:#f59e0b}.dot-submitted{background:#10b981}.dot-closed{background:#94a3b8}
+</style>
+</head>
+<body>
+<div class="header">
+  <div><h1>Flood<span>Claim</span> Pro</h1><p>Client Claim Portal</p></div>
+  <div style="text-align:right">
+    <div style="font-size:.85rem;font-weight:700">{{ claim.claim_number }}</div>
+    <div style="font-size:.75rem;opacity:.7">{{ generated }}</div>
+  </div>
+</div>
+
+<div class="container">
+  <!-- Status bar -->
+  <div class="status-bar">
+    <div class="status-dot dot-{% if claim.status == 'New' %}new{% elif claim.status == 'In Progress' %}progress{% elif claim.status == 'Submitted' %}submitted{% else %}closed{% endif %}"></div>
+    <div>
+      <div style="font-weight:700">Claim Status: {{ claim.status }}</div>
+      <div style="font-size:.8rem;color:#64748b">Last updated {{ claim.updated_at[:10] if claim.updated_at else 'N/A' }}</div>
+    </div>
+  </div>
+
+  <!-- Claim Info -->
+  <div class="claim-card">
+    <div class="section-title">Claim Information</div>
+    <div class="info-grid">
+      <div class="info-row"><label>Client:</label><span>{{ claim.client_name }}</span></div>
+      <div class="info-row"><label>Claim #:</label><span>{{ claim.claim_number }}</span></div>
+      <div class="info-row"><label>Property:</label><span>{{ claim.property_address }}</span></div>
+      <div class="info-row"><label>Flood Date:</label><span>{{ claim.flood_date }}</span></div>
+      <div class="info-row"><label>Insurance:</label><span>{{ claim.insurance_company or 'N/A' }}</span></div>
+      <div class="info-row"><label>Policy #:</label><span>{{ claim.policy_number or 'N/A' }}</span></div>
+      {% if claim.flood_zone %}<div class="info-row"><label>FEMA Flood Zone:</label><span><strong>{{ claim.flood_zone }}</strong></span></div>{% endif %}
+      <div class="info-row"><label>Adjuster:</label><span>{{ claim.adjuster_name or 'N/A' }}</span></div>
+    </div>
+  </div>
+
+  <!-- Google Maps -->
+  {% if claim.maps_embed_url %}
+  <div class="claim-card">
+    <div class="section-title">Property Location</div>
+    <iframe src="{{ claim.maps_embed_url }}" width="100%" height="250" style="border:0;border-radius:8px" allowfullscreen loading="lazy"></iframe>
+  </div>
+  {% endif %}
+
+  <!-- Rooms & Line Items -->
+  {% if room_data %}
+  <div class="claim-card">
+    <div class="section-title">Damage Assessment</div>
+    {% for rd in room_data %}
+    <div class="room-block">
+      <div class="room-header">
+        <span>{{ rd.room.name }}</span>
+        <span style="color:#10b981">${{ '%.2f'|format(rd.room.subtotal) }}</span>
+      </div>
+      {% if rd.items %}
+      <div class="room-body">
+        <table>
+          <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Total</th></tr></thead>
+          <tbody>
+          {% for item in rd.items %}
+          <tr><td>{{ item.description }}</td><td>{{ item.quantity }}</td><td>{{ item.unit }}</td><td>${{ '%.2f'|format(item.unit_cost) }}</td><td>${{ '%.2f'|format(item.total) }}</td></tr>
+          {% endfor %}
+          <tr class="total-row"><td colspan="4"><strong>Room Total</strong></td><td><strong>${{ '%.2f'|format(rd.room.subtotal) }}</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <div class="grand-total">
+      <div><div class="label">Total Damage Estimate</div></div>
+      <div class="amount">${{ '%.2f'|format(claim.total_estimate) }}</div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Digital Signature -->
+  <div class="sig-section">
+    <div class="section-title">Digital Signature</div>
+    <p style="font-size:.85rem;color:#64748b;margin-bottom:1rem">Sign below to acknowledge the damage assessment report.</p>
+    <canvas id="sig-canvas" width="800" height="150"></canvas>
+    <div style="margin-top:1rem;display:flex;align-items:center;gap:12px">
+      <input type="text" id="signer-name" placeholder="Your full name" style="padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:.85rem;flex:1">
+      <button class="btn btn-primary" onclick="submitSig()">✅ Sign & Submit</button>
+      <button class="btn btn-ghost" onclick="clearSig()">Clear</button>
+    </div>
+    <div id="sig-status" style="margin-top:.75rem;font-size:.82rem;color:#10b981;display:none">✅ Signed successfully! Thank you.</div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('sig-canvas');
+const ctx = canvas.getContext('2d');
+let drawing = false;
+ctx.strokeStyle = '#0a1628'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+canvas.addEventListener('mousedown', e => { drawing = true; ctx.beginPath(); ctx.moveTo(e.offsetX, e.offsetY); });
+canvas.addEventListener('mousemove', e => { if (!drawing) return; ctx.lineTo(e.offsetX, e.offsetY); ctx.stroke(); });
+canvas.addEventListener('mouseup', () => drawing = false);
+canvas.addEventListener('touchstart', e => { e.preventDefault(); drawing = true; const t = e.touches[0]; const r = canvas.getBoundingClientRect(); ctx.beginPath(); ctx.moveTo(t.clientX - r.left, t.clientY - r.top); });
+canvas.addEventListener('touchmove', e => { e.preventDefault(); if (!drawing) return; const t = e.touches[0]; const r = canvas.getBoundingClientRect(); ctx.lineTo(t.clientX - r.left, t.clientY - r.top); ctx.stroke(); });
+canvas.addEventListener('touchend', () => drawing = false);
+function clearSig() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+function submitSig() {
+  const signer = document.getElementById('signer-name').value.trim();
+  if (!signer) { alert('Please enter your full name.'); return; }
+  const sig_data = canvas.toDataURL();
+  fetch('/claims/{{ claim.id }}/sign', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ signer, sig_data })
+  }).then(r => r.json()).then(d => {
+    if (d.ok) { document.getElementById('sig-status').style.display = 'block'; }
+  });
+}
+</script>
+</body>
+</html>
