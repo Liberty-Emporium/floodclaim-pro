@@ -418,6 +418,7 @@ function editAiDesc(photoId) {
     fetch('/photos/' + photoId + '/ai-description', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
+      credentials: 'include',
       body: JSON.stringify({description: newText})
     }).then(r => r.json()).then(d => {
       p.innerHTML = newText || 'No analysis yet — click 🤖 to analyze.';
@@ -430,7 +431,7 @@ function editAiDesc(photoId) {
 function runAIEstimate() {
   document.getElementById('estimateModal').style.display = 'flex';
   document.getElementById('estimateContent').innerHTML = '<div style="text-align:center;padding:2rem"><div style="font-size:2rem;margin-bottom:1rem">🤖</div><p style="color:#64748b">Analyzing photos and generating estimate...<br><small>This may take 15-30 seconds</small></p></div>';
-  fetch('/claims/{{ claim.id }}/ai-estimate', {method:'POST', headers:{'Content-Type':'application/json'}})
+  fetch('/claims/{{ claim.id }}/ai-estimate', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include'})
     .then(r => r.json())
     .then(d => {
       if (d.ok) {
