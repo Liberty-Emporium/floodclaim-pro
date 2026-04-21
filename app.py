@@ -40,7 +40,11 @@ if not _SECRET_KEY:
             with open(_KEY_FILE, 'w') as _f:
                 _f.write(_SECRET_KEY)
     except Exception:
-        _SECRET_KEY = secrets.token_hex(32)   # last resort — set SECRET_KEY env var on Railway to avoid session resets on redeploy
+        # Last resort: derive a stable key from a fixed string + Railway service ID
+        # so at least it's consistent within the same Railway service even without a volume.
+        import hashlib
+        _svc = os.environ.get('RAILWAY_SERVICE_ID', 'floodclaim-pro-default')
+        _SECRET_KEY = hashlib.sha256(f'floodclaim-secret-{_svc}'.encode()).hexdigest()
 
 app.secret_key = _SECRET_KEY
 
@@ -343,6 +347,7 @@ def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if 'user_id' not in session:
+            flash('Your session expired — please log in again.', 'warning')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated
