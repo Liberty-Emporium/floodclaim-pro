@@ -209,6 +209,36 @@
 {% block extra_js %}{% endblock %}
 <script src="https://ai-agent-widget-production.up.railway.app/widget/F5J8yYT6a6GrppjviN6p8w.js"></script>
 <script>
+// Auto-format phone numbers as XXX-XXX-XXXX on all tel inputs
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('input[type="tel"]').forEach(function(el) {
+    // Format existing value on load
+    if (el.value) el.value = formatPhone(el.value);
+    el.addEventListener('input', function(e) {
+      var pos = el.selectionStart;
+      var raw = el.value.replace(/\D/g, '').slice(0, 10);
+      var fmt = formatPhone(raw);
+      el.value = fmt;
+      // Restore cursor position intelligently
+      if (pos === fmt.length || pos >= el.value.length) {
+        el.setSelectionRange(fmt.length, fmt.length);
+      }
+    });
+    el.addEventListener('blur', function() {
+      var raw = el.value.replace(/\D/g, '').slice(0, 10);
+      el.value = formatPhone(raw);
+    });
+  });
+});
+function formatPhone(raw) {
+  raw = raw.replace(/\D/g, '').slice(0, 10);
+  if (raw.length === 0) return '';
+  if (raw.length <= 3) return raw;
+  if (raw.length <= 6) return raw.slice(0,3) + '-' + raw.slice(3);
+  return raw.slice(0,3) + '-' + raw.slice(3,6) + '-' + raw.slice(6);
+}
+</script>
+<script>
 function openSidebar(){
   document.getElementById('sidebar').classList.add('open');
   document.getElementById('sidebarOverlay').classList.add('open');
