@@ -1015,6 +1015,9 @@ def delete_team_member(user_id):
         flash("Can't delete yourself.", 'error')
         return redirect(url_for('team'))
     db = get_db()
+    # Unassign their claims first to avoid FK constraint error
+    db.execute('UPDATE claims SET adjuster_id=NULL WHERE adjuster_id=?', (user_id,))
+    db.execute('DELETE FROM willie_conversations WHERE user_id=?', (user_id,))
     db.execute('DELETE FROM users WHERE id=?', (user_id,))
     db.commit()
     flash('Team member removed.', 'success')
