@@ -106,17 +106,59 @@
     .room-header{background:var(--gray-50);padding:.75rem 1.25rem;display:flex;align-items:center;justify-content:space-between;font-weight:700;font-size:.9rem;cursor:pointer}
     .room-body{padding:1.25rem}
 
+    /* ── Mobile ── */
+    .mob-nav-toggle{display:none;background:none;border:none;cursor:pointer;padding:.5rem;color:var(--gray-800)}
+    .mob-nav-toggle svg{width:24px;height:24px}
+    .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:49;transition:opacity .25s}
+    .sidebar-overlay.open{display:block}
+    .mob-close-btn{display:none;position:absolute;top:1rem;right:1rem;background:none;border:none;color:rgba(255,255,255,.6);cursor:pointer;font-size:1.4rem;line-height:1}
+
     @media(max-width:768px){
-      .sidebar{transform:translateX(-100%)}
+      :root{--sidebar-w:0px}
+      .sidebar{
+        transform:translateX(-110%);
+        transition:transform .25s ease;
+        width:270px;
+        z-index:50;
+        position:fixed;
+      }
+      .sidebar.open{transform:translateX(0)}
+      .mob-close-btn{display:block}
       .main{margin-left:0}
+      .topbar{padding:.65rem 1rem}
+      .content{padding:1rem}
       .form-row,.form-row-3{grid-template-columns:1fr}
+      .mob-nav-toggle{display:flex;align-items:center;justify-content:center}
+      .topbar-title{font-size:.95rem}
+      .stats-grid{grid-template-columns:repeat(2,1fr);gap:.75rem}
+      .stat-tile{padding:1rem}
+      .stat-tile .val{font-size:1.4rem}
+      .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+      .table{font-size:.8rem;min-width:520px}
+      .table th,.table td{padding:.5rem .6rem}
+      .card{padding:1rem}
+      .card-header{flex-wrap:wrap;gap:.5rem}
+      .btn{padding:.5rem .875rem;font-size:.82rem}
+      .action-row{flex-wrap:wrap;gap:.5rem}
+      select.form-control,input.form-control,textarea.form-control{font-size:16px}
+      .photo-grid{grid-template-columns:repeat(2,1fr)}
+      .room-header{font-size:.85rem;padding:.6rem 1rem}
+      .room-body{padding:1rem}
+      h2{font-size:1.2rem}
+    }
+    @media(max-width:480px){
+      .stats-grid{grid-template-columns:repeat(2,1fr)}
+      .topbar-right .user-badge{display:none}
+      .btn-group-wrap{flex-wrap:wrap}
     }
   </style>
   {% block extra_css %}{% endblock %}
 </head>
 <body>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 {% if session.user_id %}
-<aside class="sidebar">
+<aside class="sidebar" id="sidebar">
+  <button class="mob-close-btn" onclick="closeSidebar()">✕</button>
   <div class="sidebar-logo">
     <h1>Flood<span>Claim</span> Pro</h1>
     <p>Damage Assessment Platform</p>
@@ -144,7 +186,12 @@
 <main class="main">
   {% if session.user_id %}
   <div class="topbar">
-    <div class="topbar-title">{% block page_title %}{% endblock %}</div>
+    <div style="display:flex;align-items:center;gap:.75rem">
+      <button class="mob-nav-toggle" onclick="openSidebar()" aria-label="Open menu">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="topbar-title">{% block page_title %}{% endblock %}</div>
+    </div>
     <div class="topbar-right">
       <span class="user-badge">{{ session.email }}</span>
     </div>
@@ -161,5 +208,21 @@
 </main>
 {% block extra_js %}{% endblock %}
 <script src="https://ai-agent-widget-production.up.railway.app/widget/F5J8yYT6a6GrppjviN6p8w.js"></script>
+<script>
+function openSidebar(){
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('sidebarOverlay').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+function closeSidebar(){
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebarOverlay').classList.remove('open');
+  document.body.style.overflow='';
+}
+// Close sidebar when a nav link is clicked on mobile
+document.querySelectorAll('.nav-link').forEach(function(el){
+  el.addEventListener('click', function(){ if(window.innerWidth<=768) closeSidebar(); });
+});
+</script>
 </body>
 </html>
