@@ -279,6 +279,25 @@ def migrate_new_features():
 migrate_new_features()
 
 
+def migrate_photos_columns():
+    """Ensure photos table has room_id and ai_description columns (added in later versions)."""
+    try:
+        db   = sqlite3.connect(DB_PATH)
+        cols = [r[1] for r in db.execute('PRAGMA table_info(photos)').fetchall()]
+        if 'room_id' not in cols:
+            db.execute('ALTER TABLE photos ADD COLUMN room_id INTEGER REFERENCES rooms(id) ON DELETE SET NULL')
+        if 'ai_description' not in cols:
+            db.execute('ALTER TABLE photos ADD COLUMN ai_description TEXT DEFAULT ""')
+        if 'caption' not in cols:
+            db.execute('ALTER TABLE photos ADD COLUMN caption TEXT DEFAULT ""')
+        db.commit()
+        db.close()
+    except Exception as e:
+        print(f'migrate_photos_columns error: {e}')
+
+migrate_photos_columns()
+
+
 # ── Integrations: FEMA, Maps, Email (helpers only — routes defined after auth) ──
 
 def lookup_fema_flood_zone(address):
