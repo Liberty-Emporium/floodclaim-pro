@@ -40,7 +40,7 @@ if not _SECRET_KEY:
             with open(_KEY_FILE, 'w') as _f:
                 _f.write(_SECRET_KEY)
     except Exception:
-        _SECRET_KEY = secrets.token_hex(32)   # last resort
+        _SECRET_KEY = secrets.token_hex(32)   # last resort — set SECRET_KEY env var on Railway to avoid session resets on redeploy
 
 app.secret_key = _SECRET_KEY
 
@@ -418,7 +418,7 @@ def ai_estimate(claim_id):
     # Allow Willie token auth as fallback for cross-origin requests
     if not session.get('user_id'):
         if not willie_auth():
-            return redirect(url_for('login'))
+            return jsonify({'ok': False, 'error': 'Session expired — please refresh the page and log in again.'}), 401
     db = get_db()
     claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
     if not claim:

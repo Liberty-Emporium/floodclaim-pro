@@ -432,7 +432,12 @@ function runAIEstimate() {
   document.getElementById('estimateModal').style.display = 'flex';
   document.getElementById('estimateContent').innerHTML = '<div style="text-align:center;padding:2rem"><div style="font-size:2rem;margin-bottom:1rem">🤖</div><p style="color:#64748b">Analyzing photos and generating estimate...<br><small>This may take 15-30 seconds</small></p></div>';
   fetch('/claims/{{ claim.id }}/ai-estimate', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include'})
-    .then(r => r.json())
+    .then(r => {
+      if (!r.ok && r.status === 401) {
+        return {ok: false, error: 'Session expired — please refresh the page and log back in.'};
+      }
+      return r.json().catch(() => ({ok: false, error: 'Server returned an unexpected response (HTTP ' + r.status + '). Try refreshing the page.'}));
+    })
     .then(d => {
       if (d.ok) {
         let html = '<div style="white-space:pre-wrap;font-family:inherit;font-size:.875rem;line-height:1.7">' + escHtml(d.estimate) + '</div>';
@@ -469,7 +474,7 @@ function runAIEstimate() {
       }
     })
     .catch(e => {
-      document.getElementById('estimateContent').innerHTML = '<p style="color:#ef4444">❌ Error: ' + e.message + '</p>';
+      document.getElementById('estimateContent').innerHTML = '<p style="color:#ef4444">❌ Network error: ' + e.message + '<br><small>Check your connection or try refreshing the page.</small></p>';
     });
 }
 function closeEstimateModal() {
