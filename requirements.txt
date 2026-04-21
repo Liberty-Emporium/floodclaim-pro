@@ -2,5 +2,3 @@ flask>=2.3.0
 requests>=2.31.0
 werkzeug>=2.3.0
 gunicorn>=21.0.0
-stripe>=7.0.0
-sendgrid>=6.10.0
