@@ -168,8 +168,11 @@
         </div>
         <div class="photo-card-body">
           {% if photo.caption %}<div style="font-weight:600;font-size:.8rem;margin-bottom:.3rem">{{ photo.caption }}</div>{% endif %}
-          <div class="ai-tag">🤖 AI Analysis</div>
-          <p id="ai-desc-{{ photo.id }}">{{ photo.ai_description or 'No analysis yet — click 🤖 to analyze.' }}</p>
+          <div class="ai-tag" style="display:flex;align-items:center;justify-content:space-between">
+            <span>🤖 AI Analysis</span>
+            <button onclick="editAiDesc({{ photo.id }})" style="background:none;border:none;cursor:pointer;font-size:.7rem;color:#3b82f6;font-weight:600;padding:0">Edit</button>
+          </div>
+          <p id="ai-desc-{{ photo.id }}" onclick="editAiDesc({{ photo.id }})" style="cursor:text;min-height:1.5em" title="Click to edit">{{ photo.ai_description or 'No analysis yet — click 🤖 to analyze.' }}</p>
         </div>
       </div>
       {% endfor %}
@@ -212,8 +215,11 @@
           </div>
           <div class="photo-card-body">
             {% if photo.caption %}<div style="font-weight:600;font-size:.8rem;margin-bottom:.3rem">{{ photo.caption }}</div>{% endif %}
-            <div class="ai-tag">🤖 AI Analysis</div>
-            <p id="ai-desc-{{ photo.id }}">{{ photo.ai_description or 'No analysis yet — click 🤖 to analyze.' }}</p>
+            <div class="ai-tag" style="display:flex;align-items:center;justify-content:space-between">
+              <span>🤖 AI Analysis</span>
+              <button onclick="editAiDesc({{ photo.id }})" style="background:none;border:none;cursor:pointer;font-size:.7rem;color:#3b82f6;font-weight:600;padding:0">Edit</button>
+            </div>
+            <p id="ai-desc-{{ photo.id }}" onclick="editAiDesc({{ photo.id }})" style="cursor:text;min-height:1.5em" title="Click to edit">{{ photo.ai_description or 'No analysis yet — click 🤖 to analyze.' }}</p>
           </div>
         </div>
         {% endfor %}
@@ -380,6 +386,45 @@ function closeModalOnBackdrop(e) {
 }
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeEditModal(); closeEstimateModal(); } });
+
+// ── Edit AI Description ──
+function editAiDesc(photoId) {
+  const p = document.getElementById('ai-desc-' + photoId);
+  if (p.querySelector('textarea')) return; // already editing
+  const current = p.innerText.trim();
+  const ta = document.createElement('textarea');
+  ta.value = current === 'No analysis yet — click 🤖 to analyze.' ? '' : current;
+  ta.style.cssText = 'width:100%;min-height:80px;padding:6px 8px;border:1.5px solid #3b82f6;border-radius:6px;font-size:.8rem;font-family:inherit;resize:vertical;outline:none;line-height:1.5';
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:6px;margin-top:6px';
+  const saveBtn = document.createElement('button');
+  saveBtn.textContent = 'Save';
+  saveBtn.className = 'btn btn-primary btn-sm';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.className = 'btn btn-ghost btn-sm';
+  btnRow.appendChild(saveBtn);
+  btnRow.appendChild(cancelBtn);
+  p.innerHTML = '';
+  p.appendChild(ta);
+  p.appendChild(btnRow);
+  ta.focus();
+  cancelBtn.onclick = function() {
+    p.innerHTML = current;
+    p.onclick = function(){ editAiDesc(photoId); };
+  };
+  saveBtn.onclick = function() {
+    const newText = ta.value.trim();
+    fetch('/photos/' + photoId + '/ai-description', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({description: newText})
+    }).then(r => r.json()).then(d => {
+      p.innerHTML = newText || 'No analysis yet — click 🤖 to analyze.';
+      p.onclick = function(){ editAiDesc(photoId); };
+    });
+  };
+}
 
 // ── AI Estimate ──
 function runAIEstimate() {

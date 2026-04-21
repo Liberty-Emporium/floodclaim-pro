@@ -973,6 +973,18 @@ def delete_photo(photo_id):
     db.commit()
     return jsonify({'ok': True})
 
+@app.route('/photos/<int:photo_id>/ai-description', methods=['POST'])
+@login_required
+def edit_ai_description(photo_id):
+    """Save a manually edited AI description for a photo."""
+    data = request.get_json(silent=True) or {}
+    description = data.get('description', '').strip()
+    db = get_db()
+    db.execute('UPDATE photos SET ai_description=? WHERE id=?', (description, photo_id))
+    db.commit()
+    return jsonify({'ok': True})
+
+
 @app.route('/photos/<int:photo_id>/analyze', methods=['POST'])
 @login_required
 def analyze_photo_route(photo_id):
