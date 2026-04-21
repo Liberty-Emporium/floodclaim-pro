@@ -69,6 +69,7 @@
       <button type="submit" class="btn btn-ghost btn-sm">Update</button>
     </form>
     <a href="{{ url_for('report', claim_id=claim.id) }}" class="btn btn-cyan btn-sm" target="_blank">📄 Report</a>
+    <button class="btn btn-success btn-sm" onclick="runAIEstimate()">🤖 AI Estimate</button>
     <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-sm">← Back</a>
   </div>
 </div>
@@ -378,6 +379,53 @@ function closeModalOnBackdrop(e) {
   if (e.target === document.getElementById('editModal')) closeEditModal();
 }
 
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEditModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeEditModal(); closeEstimateModal(); } });
+
+// ── AI Estimate ──
+function runAIEstimate() {
+  document.getElementById('estimateModal').style.display = 'flex';
+  document.getElementById('estimateContent').innerHTML = '<div style="text-align:center;padding:2rem"><div style="font-size:2rem;margin-bottom:1rem">🤖</div><p style="color:#64748b">Analyzing photos and generating estimate...<br><small>This may take 15-30 seconds</small></p></div>';
+  fetch('/claims/{{ claim.id }}/ai-estimate', {method:'POST', headers:{'Content-Type':'application/json'}})
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        let html = '<div style="white-space:pre-wrap;font-family:inherit;font-size:.875rem;line-height:1.7">' + escHtml(d.estimate) + '</div>';
+        html += '<div style="margin-top:1.5rem;padding:1rem;background:#f0fdf4;border-radius:8px;border:1px solid #6ee7b7">';
+        html += '<strong style="color:#065f46">📊 Current Total: $' + d.current_total.toFixed(2) + '</strong>';
+        if (d.photos_analyzed > 0) html += '<span style="margin-left:1rem;color:#047857">📸 ' + d.photos_analyzed + ' photos analyzed</span>';
+        html += '</div>';
+        document.getElementById('estimateContent').innerHTML = html;
+      } else {
+        document.getElementById('estimateContent').innerHTML = '<p style="color:#ef4444">❌ ' + (d.error || 'Estimate failed') + '</p>';
+      }
+    })
+    .catch(e => {
+      document.getElementById('estimateContent').innerHTML = '<p style="color:#ef4444">❌ Error: ' + e.message + '</p>';
+    });
+}
+function closeEstimateModal() {
+  document.getElementById('estimateModal').style.display = 'none';
+}
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 </script>
+
+<!-- AI Estimate Modal -->
+<div id="estimateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center;padding:1rem">
+  <div style="background:#fff;border-radius:14px;width:100%;max-width:780px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">
+    <div style="padding:1.25rem 1.5rem;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:1.1rem;font-weight:800">🤖 AI Adjuster Estimate</div>
+        <div style="font-size:.78rem;color:#64748b">{{ claim.claim_number }} · {{ claim.client_name }}</div>
+      </div>
+      <button onclick="closeEstimateModal()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#94a3b8;line-height:1">×</button>
+    </div>
+    <div id="estimateContent" style="padding:1.5rem;overflow-y:auto;flex:1"></div>
+    <div style="padding:1rem 1.5rem;border-top:1px solid #e2e8f0;display:flex;gap:.75rem;justify-content:flex-end">
+      <button onclick="window.print()" class="btn btn-ghost btn-sm">🖨️ Print</button>
+      <button onclick="closeEstimateModal()" class="btn btn-primary btn-sm">Close</button>
+    </div>
+  </div>
+</div>
 {% endblock %}

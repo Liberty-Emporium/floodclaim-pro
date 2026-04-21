@@ -410,6 +410,102 @@ def willie_auth():
     return bool(token and token == get_setting('willie_api_token'))
 
 
+# ── AI Adjuster Estimate (UI) ───────────────────────────────────────────────────
+@app.route('/claims/<int:claim_id>/ai-estimate', methods=['POST'])
+@login_required
+def ai_estimate(claim_id):
+    """Generate a full AI adjuster estimate — analyzes photos + line items."""
+    db = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim:
+        return jsonify({'ok': False, 'error': 'Claim not found'}), 404
+
+    key   = get_setting('openrouter_api_key') or OPENROUTER_KEY
+    model = get_setting('ai_model') or 'openai/gpt-4o-mini'
+    if not key:
+        return jsonify({'ok': False, 'error': 'OpenRouter API key not configured. Go to Settings and add your key.'}), 400
+
+    # Rooms + line items
+    rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    room_section = ''
+    for r in rooms:
+        items = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (r['id'],)).fetchall()
+        item_list = '; '.join([f"{i['description']} x{i['quantity']} {i['unit']} @${i['unit_cost']:.2f}" for i in items]) or 'No items'
+        room_section += f"  {r['name']}: {item_list}\n"
+    if not room_section:
+        room_section = '  No rooms documented yet.\n'
+
+    # Analyze photos (use cached AI descriptions or run fresh)
+    photos = db.execute('SELECT * FROM photos WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    photo_analyses = []
+    for photo in photos[:8]:
+        photo_path = os.path.join(UPLOAD_DIR, photo['filename'])
+        desc = photo.get('ai_description', '')
+        if not desc and os.path.exists(photo_path):
+            desc = ai_describe_photo(photo_path)
+            if desc:
+                db.execute('UPDATE photos SET ai_description=? WHERE id=?', (desc, photo['id']))
+                db.commit()
+        if desc:
+            label = photo.get('caption') or photo['filename']
+            photo_analyses.append(f"  [{label}]: {desc}")
+    photo_section = '\n'.join(photo_analyses) if photo_analyses else '  No photos uploaded yet.'
+
+    prompt = f"""You are a licensed public adjuster and flood damage estimator with 20 years of experience.
+Analyze this flood damage claim and produce a complete, professional estimate like you would submit to an insurance company.
+
+=== CLAIM DETAILS ===
+Claim #: {claim['claim_number']}
+Client: {claim['client_name']}
+Property: {claim['property_address']}
+Flood Date: {claim['flood_date']}
+Flood Source: {claim.get('flood_source') or 'Not specified'}
+Water Category: {claim.get('water_category') or 'Not specified'}
+Water Class: {claim.get('water_class') or 'Not specified'}
+Water Depth: {claim.get('water_depth_in') or 'Not specified'} inches
+Insurance Co: {claim.get('insurance_company') or 'Not specified'}
+FEMA Flood Zone: {claim.get('flood_zone') or 'Not determined'}
+
+=== CURRENT ROOMS & LINE ITEMS ===
+{room_section}
+Current Documented Total: ${claim['total_estimate']:.2f}
+
+=== PHOTO ANALYSIS ===
+{photo_section}
+
+=== YOUR TASK ===
+As a professional adjuster, provide:
+
+1. 📸 PHOTO FINDINGS
+What specific damage is visible in each photo? (water lines, mold, structural, flooring, drywall, etc.)
+
+2. 📊 COMPLETE LINE-ITEM ESTIMATE
+List every repair needed:
+| Item | Qty | Unit | Unit Cost | Total |
+Mark existing items ✅ and new recommended items ➕
+
+3. 💰 ESTIMATE SUMMARY
+- Subtotal per room
+- Grand Total
+- 10% contingency
+- Recommended claim amount
+
+4. ⚠️ ADJUSTER NOTES
+Documentation gaps, red flags, items insurance may dispute, and what to photograph next.
+
+Use current market rates for {claim.get('property_address', 'North Carolina')}. Be thorough and professional."""
+
+    estimate = call_openrouter([{'role': 'user', 'content': prompt}], model, key)
+    return jsonify({
+        'ok': True,
+        'claim_number': claim['claim_number'],
+        'client': claim['client_name'],
+        'current_total': float(claim['total_estimate']),
+        'photos_analyzed': len(photo_analyses),
+        'estimate': estimate
+    })
+
+
 # ── PDF Export ────────────────────────────────────────────────────────────────
 @app.route('/claims/<int:claim_id>/report/pdf')
 @login_required
@@ -1228,51 +1324,100 @@ def willie_lookup_claim():
 
 @app.route('/willie/api/claims/<int:claim_id>/estimate', methods=['POST'])
 def willie_generate_estimate(claim_id):
-    """Use AI to generate a cost estimate for all rooms in the claim."""
+    """Use AI (with photo vision) to generate a full adjuster-style estimate."""
     if not willie_auth():
         return jsonify({'error': 'unauthorized'}), 401
     db = get_db()
     claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
     if not claim:
         return jsonify({'error': 'Claim not found'}), 404
-    rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
-    if not rooms:
-        return jsonify({'error': 'No rooms found on this claim. Add rooms first.'}), 400
-
-    room_summary = []
-    for r in rooms:
-        items = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (r['id'],)).fetchall()
-        item_list = ', '.join([f"{i['description']} ({i['quantity']} {i['unit']} @ ${i['unit_cost']})" for i in items]) or 'No items yet'
-        room_summary.append(f"- {r['name']}: {item_list}")
-
-    prompt = f"""You are a professional flood damage estimator. Review this claim and provide a detailed cost estimate.
-
-Claim: {claim['claim_number']}
-Client: {claim['client_name']}
-Property: {claim['property_address']}
-Flood Date: {claim['flood_date']}
-Flood Source: {claim.get('flood_source') or 'Unknown'}
-Water Category: {claim.get('water_category') or 'Unknown'}
-Current Rooms & Line Items:
-{chr(10).join(room_summary)}
-
-Current Total: ${claim['total_estimate']:.2f}
-
-Please provide:
-1. A review of whether current line items look complete and reasonably priced
-2. Any missing line items you'd recommend adding (with estimated costs)
-3. A total estimate range for this type of damage
-4. Priority items to document or address first
-
-Be specific with dollar amounts. Use industry-standard rates for {claim.get('property_address', 'NC') }."""
 
     key = get_setting('openrouter_api_key') or OPENROUTER_KEY
     model = get_setting('ai_model') or 'openai/gpt-4o-mini'
     if not key:
         return jsonify({'error': 'OpenRouter API key not configured. Add it in Settings.'}), 400
 
-    estimate = call_openrouter([{'role':'user','content':prompt}], model, key)
-    return jsonify({'ok': True, 'claim_number': claim['claim_number'], 'current_total': claim['total_estimate'], 'estimate': estimate})
+    # Gather rooms + items
+    rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    room_summary = []
+    for r in rooms:
+        items = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (r['id'],)).fetchall()
+        item_list = '; '.join([f"{i['description']} x{i['quantity']} {i['unit']} @${i['unit_cost']:.2f}" for i in items]) or 'No line items yet'
+        room_summary.append(f"  Room: {r['name']}\n  Items: {item_list}")
+
+    # Analyze all photos with vision AI
+    photos = db.execute('SELECT * FROM photos WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    photo_analyses = []
+    for photo in photos[:8]:  # limit to 8 photos to avoid token overflow
+        photo_path = os.path.join(UPLOAD_DIR, photo['filename'])
+        if os.path.exists(photo_path):
+            if photo.get('ai_description'):
+                photo_analyses.append(f"Photo ({photo['caption'] or photo['filename']}): {photo['ai_description']}")
+            else:
+                analysis = ai_describe_photo(photo_path)
+                if analysis:
+                    db.execute('UPDATE photos SET ai_description=? WHERE id=?', (analysis, photo['id']))
+                    db.commit()
+                    photo_analyses.append(f"Photo ({photo['caption'] or photo['filename']}): {analysis}")
+
+    photo_section = '\n'.join(photo_analyses) if photo_analyses else 'No photos uploaded yet.'
+    room_section  = '\n'.join(room_summary) if room_summary else 'No rooms documented yet.'
+
+    prompt = f"""You are a licensed public adjuster and flood damage estimator with 20 years of experience.
+Analyze this flood damage claim and produce a complete professional estimate like you would submit to an insurance company.
+
+=== CLAIM DETAILS ===
+Claim #: {claim['claim_number']}
+Client: {claim['client_name']}
+Property: {claim['property_address']}
+Flood Date: {claim['flood_date']}
+Flood Source: {claim.get('flood_source') or 'Not specified'}
+Water Category: {claim.get('water_category') or 'Not specified'}
+Water Class: {claim.get('water_class') or 'Not specified'}
+Water Depth: {claim.get('water_depth_in') or 'Not specified'} inches
+Insurance Co: {claim.get('insurance_company') or 'Not specified'}
+FEMA Flood Zone: {claim.get('flood_zone') or 'Not determined'}
+
+=== CURRENT ROOMS & LINE ITEMS ===
+{room_section}
+
+Current Total: ${claim['total_estimate']:.2f}
+
+=== PHOTO ANALYSIS ===
+{photo_section}
+
+=== YOUR TASK ===
+Based on the photos, claim details, and current line items, provide:
+
+1. **PHOTO FINDINGS** — What damage did you observe in each photo? Be specific (water staining, mold, structural damage, flooring damage, etc.)
+
+2. **COMPLETE LINE-ITEM ESTIMATE** — List every repair item needed with:
+   - Description
+   - Quantity + Unit (sq ft, ln ft, ea, hr)
+   - Unit Cost
+   - Line Total
+   Mark items already documented with ✅, missing items with ➕
+
+3. **ESTIMATE SUMMARY**
+   - Subtotal by room
+   - Grand Total
+   - Suggested contingency (10-15%)
+   - Final recommended claim amount
+
+4. **ADJUSTER NOTES** — Any red flags, documentation gaps, or items the insurance company will likely scrutinize.
+
+Use current market rates for the {claim.get('property_address', 'southeastern US')} area. Be thorough — this goes to the insurance company."""
+
+    estimate = call_openrouter([{'role': 'user', 'content': prompt}], model, key)
+    return jsonify({
+        'ok': True,
+        'claim_number': claim['claim_number'],
+        'client': claim['client_name'],
+        'property': claim['property_address'],
+        'current_total': claim['total_estimate'],
+        'photos_analyzed': len(photo_analyses),
+        'estimate': estimate
+    })
 
 
 @app.route('/willie/api/claims', methods=['POST'])
