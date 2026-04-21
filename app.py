@@ -1970,24 +1970,25 @@ def willie_dashboard():
 def willie_list_rooms(claim_id):
     if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
     db = get_db()
-    rooms = db.execute('SELECT id, room_name, notes FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
-    items = db.execute('SELECT id, room_id, description, quantity, unit, unit_cost, total_cost FROM line_items WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    claim = db.execute('SELECT id FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim: return jsonify({'error': 'Claim not found'}), 404
+    rooms = db.execute('SELECT id, name, subtotal FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
     rooms_out = []
     for r in rooms:
-        room_items = [dict(i) for i in items if i['room_id'] == r['id']]
-        rooms_out.append({'id': r['id'], 'room_name': r['room_name'], 'notes': r['notes'], 'line_items': room_items})
-    return jsonify({'ok': True, 'claim_id': claim_id, 'rooms': rooms_out})
+        items = db.execute('SELECT id, room_id, description, quantity, unit, unit_cost, total FROM line_items WHERE room_id=? ORDER BY id', (r['id'],)).fetchall()
+        rooms_out.append({'id': r['id'], 'name': r['name'], 'subtotal': r['subtotal'], 'line_items': [dict(i) for i in items]})
+    return jsonify({'ok': True, 'claim_id': claim_id, 'rooms': rooms_out, 'count': len(rooms_out)})
 
 
 @app.route('/willie/api/claims/<int:claim_id>/rooms/<int:room_id>', methods=['DELETE'])
 def willie_delete_room(claim_id, room_id):
     if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
     db = get_db()
-    room = db.execute('SELECT id, room_name FROM rooms WHERE id=? AND claim_id=?', (room_id, claim_id)).fetchone()
+    room = db.execute('SELECT id, name FROM rooms WHERE id=? AND claim_id=?', (room_id, claim_id)).fetchone()
     if not room: return jsonify({'error': 'Room not found'}), 404
     db.execute('DELETE FROM rooms WHERE id=?', (room_id,))
     db.commit()
-    return jsonify({'ok': True, 'message': f'Room "{room["room_name"]}" and all its line items deleted.'})
+    return jsonify({'ok': True, 'message': f'Room "{room["name"]}" and all its line items deleted.'})
 
 
 @app.route('/willie/api/line-items/<int:item_id>', methods=['DELETE'])
