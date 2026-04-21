@@ -2448,6 +2448,7 @@ def willie_sync_actions():
     })
 
 
+@app.route('/willie/api/claims/<int:claim_id>/update', methods=['POST'])
 @app.route('/willie/api/claims/<int:claim_id>', methods=['PATCH'])
 def willie_update_claim(claim_id):
     """Update any field(s) on a claim. Accepts a JSON body with any claim columns.
