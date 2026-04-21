@@ -681,6 +681,21 @@ def billing_checkout():
     flash('Stripe integration coming soon — add STRIPE_SECRET_KEY in Settings to activate.', 'info')
     return redirect(url_for('billing'))
 
+def call_openrouter(messages, model, key):
+    """Call OpenRouter chat completions API. Returns response text or error string."""
+    try:
+        r = _req.post(
+            'https://openrouter.ai/api/v1/chat/completions',
+            headers={'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'},
+            json={'model': model, 'messages': messages, 'max_tokens': 1500},
+            timeout=60
+        )
+        data = r.json()
+        return data['choices'][0]['message']['content'].strip()
+    except Exception as e:
+        return f'Error calling AI: {str(e)}'
+
+
 def ai_describe_photo(image_path):
     key = get_setting('openrouter_api_key') or OPENROUTER_KEY
     if not key:
@@ -1279,7 +1294,7 @@ def api_analyze_photo():
             }, timeout=30)
         desc = r.json()['choices'][0]['message']['content']
         return jsonify({'description': desc})
-    except Exception as e:
+    except Exception:
         return jsonify({'description': ''})
 
 @app.route('/willie/token')
