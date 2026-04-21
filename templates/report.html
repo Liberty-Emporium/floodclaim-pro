@@ -86,11 +86,11 @@ td{padding:.6rem .75rem;border-bottom:1px solid #f1f5f9}
       <span style="color:#10b981">${{ "{:,.2f}".format(rd.room.subtotal) }}</span>
     </div>
     <div class="room-body">
-      {% if rd.items %}
+      {% if rd.line_items %}
       <table>
         <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Total</th></tr></thead>
         <tbody>
-        {% for item in rd.items %}
+        {% for item in rd.line_items %}
         <tr>
           <td>{{ item.description }}</td>
           <td>{{ item.quantity }}</td>
@@ -106,9 +106,9 @@ td{padding:.6rem .75rem;border-bottom:1px solid #f1f5f9}
         </tbody>
       </table>
       {% endif %}
-      {% if rd.photos %}
+      {% if rd.room_photos %}
       <div class="photo-grid">
-        {% for photo in rd.photos %}
+        {% for photo in rd.room_photos %}
         <div>
           <img src="{{ request.host_url }}uploads/{{ photo.filename }}" alt="{{ photo.caption }}"/>
           {% if photo.caption %}<div class="photo-caption">{{ photo.caption }}</div>{% endif %}

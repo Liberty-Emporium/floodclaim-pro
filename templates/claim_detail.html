@@ -199,9 +199,9 @@
     </div>
     <div class="room-body" id="room-{{rd.room.id}}">
 
-      {% if rd.photos %}
+      {% if rd.room_photos %}
       <div class="photo-grid" style="margin-top:0;margin-bottom:1rem">
-        {% for photo in rd.photos %}
+        {% for photo in rd.room_photos %}
         <div class="photo-card" id="photo-{{ photo.id }}"
              data-photo-id="{{ photo.id }}"
              data-caption="{{ photo.caption|e }}"
@@ -226,11 +226,11 @@
       </div>
       {% endif %}
 
-      {% if rd.items %}
+      {% if rd.line_items %}
       <table class="table" style="margin-bottom:1rem">
         <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Total</th><th></th></tr></thead>
         <tbody>
-        {% for item in rd.items %}
+        {% for item in rd.line_items %}
         <tr>
           <td>{{ item.description }}</td>
           <td>{{ item.quantity }}</td>

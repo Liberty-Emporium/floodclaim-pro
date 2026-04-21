@@ -447,6 +447,7 @@ def ai_estimate(claim_id):
     claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
     if not claim:
         return jsonify({'ok': False, 'error': 'Claim not found'}), 404
+    claim = dict(claim)  # convert sqlite3.Row → dict so .get() works
 
     key   = get_setting('openrouter_api_key') or OPENROUTER_KEY
     model = get_setting('ai_model') or 'openai/gpt-4o-mini'
@@ -568,7 +569,7 @@ def report_pdf(claim_id):
     for room in rooms:
         items  = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
         photos = db.execute('SELECT * FROM photos WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
-        room_data.append({'room': room, 'items': items, 'photos': photos})
+        room_data.append({'room': room, 'line_items': items, 'room_photos': photos})
     unassigned_photos = db.execute('SELECT * FROM photos WHERE claim_id=? AND room_id IS NULL', (claim_id,)).fetchall()
     recalc_claim(claim_id)
     claim = db.execute('''SELECT c.*, u.name as adjuster_name, u.email as adjuster_email
@@ -679,7 +680,7 @@ def client_portal(token):
     for room in rooms:
         items  = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
         photos = db.execute('SELECT * FROM photos WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
-        room_data.append({'room': room, 'items': items, 'photos': photos})
+        room_data.append({'room': room, 'line_items': items, 'room_photos': photos})
     return render_template('client_portal.html', claim=claim, room_data=room_data, token=token,
                            generated=datetime.datetime.now().strftime('%B %d, %Y'))
 
@@ -914,7 +915,7 @@ def claim_detail(claim_id):
         for room in rooms:
             items  = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
             photos = db.execute('SELECT * FROM photos WHERE room_id=? ORDER BY id',     (room['id'],)).fetchall()
-            room_data.append({'room': room, 'items': items, 'photos': photos})
+            room_data.append({'room': room, 'line_items': items, 'room_photos': photos})
         unassigned_photos = db.execute(
             'SELECT * FROM photos WHERE claim_id=? AND room_id IS NULL ORDER BY id',
             (claim_id,)).fetchall()
@@ -1101,7 +1102,7 @@ def report(claim_id):
     for room in rooms:
         items  = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
         photos = db.execute('SELECT * FROM photos WHERE room_id=? ORDER BY id',     (room['id'],)).fetchall()
-        room_data.append({'room': room, 'items': items, 'photos': photos})
+        room_data.append({'room': room, 'line_items': items, 'room_photos': photos})
     unassigned_photos = db.execute(
         'SELECT * FROM photos WHERE claim_id=? AND room_id IS NULL', (claim_id,)).fetchall()
     recalc_claim(claim_id)
@@ -1411,6 +1412,7 @@ def willie_generate_estimate(claim_id):
     claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
     if not claim:
         return jsonify({'error': 'Claim not found'}), 404
+    claim = dict(claim)  # convert sqlite3.Row → dict so .get() works
 
     key = get_setting('openrouter_api_key') or OPENROUTER_KEY
     model = get_setting('ai_model') or 'openai/gpt-4o-mini'
@@ -1426,7 +1428,7 @@ def willie_generate_estimate(claim_id):
         room_summary.append(f"  Room: {r['name']}\n  Items: {item_list}")
 
     # Analyze all photos with vision AI
-    photos = db.execute('SELECT * FROM photos WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    photos = [dict(p) for p in db.execute('SELECT * FROM photos WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()]
     photo_analyses = []
     for photo in photos[:8]:  # limit to 8 photos to avoid token overflow
         photo_path = os.path.join(UPLOAD_DIR, photo['filename'])

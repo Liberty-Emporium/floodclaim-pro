@@ -88,12 +88,12 @@ td{padding:.5rem;border-bottom:1px solid #f8fafc}
         <span>{{ rd.room.name }}</span>
         <span style="color:#10b981">${{ '%.2f'|format(rd.room.subtotal) }}</span>
       </div>
-      {% if rd.items %}
+      {% if rd.line_items %}
       <div class="room-body">
         <table>
           <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Total</th></tr></thead>
           <tbody>
-          {% for item in rd.items %}
+          {% for item in rd.line_items %}
           <tr><td>{{ item.description }}</td><td>{{ item.quantity }}</td><td>{{ item.unit }}</td><td>${{ '%.2f'|format(item.unit_cost) }}</td><td>${{ '%.2f'|format(item.total) }}</td></tr>
           {% endfor %}
           <tr class="total-row"><td colspan="4"><strong>Room Total</strong></td><td><strong>${{ '%.2f'|format(rd.room.subtotal) }}</strong></td></tr>
