@@ -14,8 +14,8 @@
       --gray-400:#94a3b8;--gray-600:#475569;--gray-800:#1e293b;
       --sidebar-w:240px;
     }
-    html{scroll-behavior:smooth}
-    body{font-family:'Inter',sans-serif;background:var(--gray-50);color:var(--gray-800);display:flex;min-height:100vh}
+    html{scroll-behavior:smooth;overflow-x:hidden}
+    body{font-family:'Inter',sans-serif;background:var(--gray-50);color:var(--gray-800);display:flex;min-height:100vh;overflow-x:hidden;max-width:100%}
 
     /* sidebar */
     .sidebar{width:var(--sidebar-w);background:var(--navy);min-height:100vh;position:fixed;top:0;left:0;display:flex;flex-direction:column;z-index:50}
@@ -135,6 +135,7 @@
       .stat-tile .val{font-size:1.4rem}
       .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
       .table{font-size:.8rem;min-width:520px}
+      .table td,.table th{word-break:break-word}
       .table th,.table td{padding:.5rem .6rem}
       .card{padding:1rem}
       .card-header{flex-wrap:wrap;gap:.5rem}
@@ -142,6 +143,7 @@
       .action-row{flex-wrap:wrap;gap:.5rem}
       select.form-control,input.form-control,textarea.form-control{font-size:16px}
       .photo-grid{grid-template-columns:repeat(2,1fr)}
+      img{max-width:100%;height:auto}
       .room-header{font-size:.85rem;padding:.6rem 1rem}
       .room-body{padding:1rem}
       h2{font-size:1.2rem}
