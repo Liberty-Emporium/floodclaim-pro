@@ -62,6 +62,36 @@ app.config['SESSION_COOKIE_SAMESITE']   = 'Lax'
 # drop it. Railway enforces HTTPS at the edge already.
 app.config['SESSION_COOKIE_SECURE']     = False
 
+# ── CSRF protection ───────────────────────────────────────────────────────────────
+def _get_csrf_token():
+    """Generate (or retrieve) a per-session CSRF token."""
+    if 'csrf_token' not in session:
+        session['csrf_token'] = secrets.token_hex(32)
+    return session['csrf_token']
+
+def _validate_csrf():
+    """Return True if the CSRF token in the request matches the session token."""
+    token = (request.form.get('csrf_token')
+             or request.headers.get('X-CSRF-Token', ''))
+    return bool(token and token == session.get('csrf_token', ''))
+
+# Expose to all Jinja2 templates as {{ csrf_token() }}
+app.jinja_env.globals['csrf_token'] = _get_csrf_token
+
+def csrf_required(f):
+    """Decorator: reject POST requests with missing/invalid CSRF token.
+    Skips validation for Willie API routes (Bearer token auth).
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if request.method == 'POST' and not _validate_csrf():
+            # API callers use JSON + Bearer — don't break them
+            if request.is_json or request.headers.get('Authorization', ''):
+                return f(*args, **kwargs)
+            return jsonify({'error': 'CSRF validation failed'}), 403
+        return f(*args, **kwargs)
+    return decorated
+
 DATA_DIR    = os.environ.get('RAILWAY_VOLUME_MOUNT_PATH', '/data')
 DB_PATH     = os.path.join(DATA_DIR, 'floodclaim.db')
 UPLOAD_DIR  = os.path.join(DATA_DIR, 'uploads')
@@ -1044,6 +1074,7 @@ def billing():
 
 @app.route('/billing/checkout', methods=['POST'])
 @login_required
+@csrf_required
 def billing_checkout():
     flash('Stripe integration coming soon — add STRIPE_SECRET_KEY in Settings to activate.', 'info')
     return redirect(url_for('billing'))
@@ -1140,6 +1171,7 @@ def index():
     return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
+@csrf_required
 def login():
     if 'user_id' in session:
         return redirect(url_for('dashboard'))
@@ -1200,6 +1232,7 @@ def dashboard():
 
 @app.route('/claims/new', methods=['GET', 'POST'])
 @login_required
+@csrf_required
 def new_claim():
     db = get_db()
     if request.method == 'POST':
@@ -1251,6 +1284,7 @@ def new_claim():
 
 @app.route('/claims/<int:claim_id>/delete', methods=['POST'])
 @login_required
+@csrf_required
 def delete_claim(claim_id):
     """Delete a claim and all its rooms, line items, and photos."""
     db = get_db()
@@ -1311,6 +1345,7 @@ def claim_detail(claim_id):
 
 @app.route('/claims/<int:claim_id>/status', methods=['POST'])
 @login_required
+@csrf_required
 def update_status(claim_id):
     db = get_db()
     status = request.form.get('status')
@@ -1324,6 +1359,7 @@ def update_status(claim_id):
 
 @app.route('/claims/<int:claim_id>/room/add', methods=['POST'])
 @login_required
+@csrf_required
 def add_room(claim_id):
     db    = get_db()
     claim = db.execute('SELECT id FROM claims WHERE id=?', (claim_id,)).fetchone()
@@ -1338,6 +1374,7 @@ def add_room(claim_id):
 
 @app.route('/rooms/<int:room_id>/delete', methods=['POST'])
 @login_required
+@csrf_required
 def delete_room(room_id):
     db   = get_db()
     room = db.execute('SELECT * FROM rooms WHERE id=?', (room_id,)).fetchone()
@@ -1353,6 +1390,7 @@ def delete_room(room_id):
 
 @app.route('/rooms/<int:room_id>/item/add', methods=['POST'])
 @login_required
+@csrf_required
 def add_item(room_id):
     db        = get_db()
     room      = db.execute('SELECT * FROM rooms WHERE id=?', (room_id,)).fetchone()
@@ -1373,6 +1411,7 @@ def add_item(room_id):
 
 @app.route('/items/<int:item_id>/delete', methods=['POST'])
 @login_required
+@csrf_required
 def delete_item(item_id):
     db   = get_db()
     item = db.execute(
@@ -1386,6 +1425,7 @@ def delete_item(item_id):
 
 @app.route('/claims/<int:claim_id>/photo/upload', methods=['POST'])
 @login_required
+@csrf_required
 def upload_photo(claim_id):
     db      = get_db()
     file    = request.files.get('photo')
@@ -1415,6 +1455,7 @@ def uploaded_file(filename):
 
 @app.route('/photos/<int:photo_id>/delete', methods=['POST'])
 @login_required
+@csrf_required
 def delete_photo(photo_id):
     db    = get_db()
     photo = db.execute('SELECT * FROM photos WHERE id=?', (photo_id,)).fetchone()
@@ -1462,6 +1503,7 @@ def analyze_photo_route(photo_id):
 
 @app.route('/photos/<int:photo_id>/edit', methods=['POST'])
 @login_required
+@csrf_required
 def edit_photo(photo_id):
     db      = get_db()
     photo   = db.execute('SELECT * FROM photos WHERE id=?', (photo_id,)).fetchone()
@@ -1507,6 +1549,7 @@ def report(claim_id):
 @app.route('/admin/settings', methods=['GET', 'POST'])
 @login_required
 @admin_required
+@csrf_required
 def settings():
     if request.method == 'POST':
         openrouter_key = request.form.get('openrouter_api_key', '').strip()
@@ -1561,6 +1604,7 @@ def team():
 @app.route('/admin/team/add', methods=['POST'])
 @login_required
 @admin_required
+@csrf_required
 def add_team_member():
     db    = get_db()
     email = request.form.get('email', '').strip().lower()
@@ -1582,6 +1626,7 @@ def add_team_member():
 @app.route('/admin/team/<int:user_id>/delete', methods=['POST'])
 @login_required
 @admin_required
+@csrf_required
 def delete_team_member(user_id):
     if user_id == session['user_id']:
         flash("Can't delete yourself.", 'error')

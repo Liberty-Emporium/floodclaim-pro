@@ -134,6 +134,7 @@
   </div>
   <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center">
     <form method="POST" action="{{ url_for('update_status', claim_id=claim.id) }}" style="display:flex;gap:.5rem;align-items:center">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <select name="status" class="form-control" style="width:auto;padding:.4rem .75rem;font-size:.85rem">
         {% for s in ['New','In Progress','Submitted','Closed'] %}
         <option value="{{ s }}" {% if claim.status==s %}selected{% endif %}>{{ s }}</option>
@@ -146,6 +147,7 @@
     <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-sm">← Back</a>
     <form method="POST" action="{{ url_for('delete_claim', claim_id=claim.id) }}"
           onsubmit="return confirm('Delete claim {{ claim.claim_number }} ({{ claim.client_name }})? This will permanently remove all rooms, photos, and line items.')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-danger btn-sm">🗑 Delete Claim</button>
     </form>
   </div>
@@ -205,6 +207,7 @@
     <div class="card-title">📸 Upload Damage Photo</div>
   </div>
   <form method="POST" action="{{ url_for('upload_photo', claim_id=claim.id) }}" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:1rem;align-items:end">
       <div class="form-group" style="margin:0">
         <label>Photo</label>
@@ -265,6 +268,7 @@
   <div class="card-header">
     <div class="card-title">🛠️ Room-by-Room Damage</div>
     <form method="POST" action="{{ url_for('add_room', claim_id=claim.id) }}" style="display:flex;gap:.5rem">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input class="form-control" type="text" name="room_name" placeholder="e.g. Living Room" style="width:180px"/>
       <button type="submit" class="btn btn-success btn-sm">+ Add Room</button>
     </form>
@@ -277,6 +281,7 @@
       <span style="display:flex;align-items:center;gap:.75rem">
         <span style="color:#10b981;font-size:.95rem">${{ "{:,.2f}".format(rd.room.subtotal) }} <span style="color:#94a3b8;font-size:.75rem;font-weight:400">▾</span></span>
         <form method="POST" action="{{ url_for('delete_room', room_id=rd.room.id) }}" onsubmit="return confirm('Delete room \'{{ rd.room.name }}\' and all its items? This cannot be undone.')" onclick="event.stopPropagation()">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn btn-danger btn-sm" style="padding:.2rem .5rem;font-size:.75rem" title="Delete room">🗑 Remove</button>
         </form>
       </span>
@@ -331,6 +336,7 @@
       {% endif %}
 
       <form method="POST" action="{{ url_for('add_item', room_id=rd.room.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div style="display:grid;grid-template-columns:3fr 1fr 1fr 1fr auto;gap:.5rem;align-items:end">
           <div class="form-group" style="margin:0">
             <label style="font-size:.7rem">Description</label>
@@ -378,6 +384,7 @@
     <div class="modal-title">✏️ Edit Photo</div>
     <img id="modalPreview" class="modal-preview" src="" alt="preview"/>
     <form id="editPhotoForm" method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-group">
         <label>Caption</label>
         <input class="form-control" type="text" name="caption" id="modalCaption" placeholder="Describe what this photo shows"/>

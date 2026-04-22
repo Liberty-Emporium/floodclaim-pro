@@ -112,6 +112,7 @@
 {% block content %}
 <div class="claim-form">
 <form method="POST" enctype="multipart/form-data" id="claim-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
   <!-- ── 1. CLIENT ─────────────────────────────────────────────────────────── -->
   <div class="card" style="margin-bottom:1.5rem">

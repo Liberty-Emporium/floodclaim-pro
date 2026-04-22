@@ -84,6 +84,7 @@
     </div>
 
     <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
       <!-- API Key -->
       {% if key_is_set %}
@@ -194,6 +195,7 @@
     </div>
 
     <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-group">
         <label>Willie Widget API Key</label>
         <input class="form-control" type="password" name="willie_agent_key"

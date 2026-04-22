@@ -72,6 +72,7 @@
       <td>
         <form method="POST" action="{{ url_for('delete_claim', claim_id=c.id) }}"
               onsubmit="return confirm('Delete claim {{ c.claim_number }} ({{ c.client_name }})? This cannot be undone.')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn btn-danger btn-sm" title="Delete claim">🗑</button>
         </form>
       </td>

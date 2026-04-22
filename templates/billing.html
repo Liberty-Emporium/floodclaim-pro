@@ -24,6 +24,7 @@
       {% endfor %}
     </ul>
     <form method="POST" action="/billing/checkout">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="plan" value="{{ plan.id }}">
       <button type="submit" style="width:100%;background:{% if plan.id == 'pro' %}#6366f1{% else %}#0a1628{% endif %};color:#fff;border:none;padding:.75rem;border-radius:8px;font-size:.9rem;font-weight:700;cursor:pointer">Get Started →</button>
     </form>
