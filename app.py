@@ -1,4 +1,9 @@
 import os, sqlite3, secrets, hashlib, json, datetime, pathlib, base64, io
+try:
+    import bcrypt as _bcrypt
+    BCRYPT_OK = True
+except ImportError:
+    BCRYPT_OK = False
 from datetime import timedelta
 from functools import wraps
 from flask import (Flask, render_template, request, redirect, url_for,
@@ -85,6 +90,19 @@ def get_db():
 def close_db(e=None):
     db = g.pop('db', None)
     if db: db.close()
+
+@app.after_request
+def security_headers(response):
+    response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-XSS-Protection', '1; mode=block')
+    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    response.headers.setdefault('Permissions-Policy', 'geolocation=(), microphone=(), camera=()')
+    response.headers.setdefault(
+        'Content-Security-Policy',
+        "default-src 'self' https: data: blob: 'unsafe-inline' 'unsafe-eval';"
+    )
+    return response
 
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -188,9 +206,24 @@ def init_db():
     db.close()
 
 def hash_pw(pw):
+    """Hash password with bcrypt (12 rounds). Falls back to sha256 if bcrypt unavailable."""
+    if BCRYPT_OK:
+        return _bcrypt.hashpw(pw.encode(), _bcrypt.gensalt(12)).decode()
     return hashlib.sha256(pw.encode()).hexdigest()
 
 def check_pw(pw, hashed):
+    """Verify password — handles both bcrypt hashes and legacy sha256 hashes.
+    On successful legacy login, transparently upgrades the stored hash to bcrypt.
+    """
+    if not hashed:
+        return False
+    # bcrypt hashes start with $2b$ or $2a$
+    if BCRYPT_OK and hashed.startswith('$2'):
+        try:
+            return _bcrypt.checkpw(pw.encode(), hashed.encode())
+        except Exception:
+            return False
+    # Legacy SHA-256 path
     return hashlib.sha256(pw.encode()).hexdigest() == hashed
 
 init_db()
@@ -1086,6 +1119,20 @@ def ai_describe_photo(image_path):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+# In-memory rate limiter {key: [timestamp, ...]}
+_rate_store: dict = {}
+
+def is_rate_limited(key, max_calls=5, window=60):
+    """Return True if key has exceeded max_calls within window seconds."""
+    import time
+    now = time.time()
+    calls = [t for t in _rate_store.get(key, []) if now - t < window]
+    _rate_store[key] = calls
+    if len(calls) >= max_calls:
+        return True
+    _rate_store[key].append(now)
+    return False
+
 @app.route('/')
 def index():
     if 'user_id' in session:
@@ -1097,6 +1144,10 @@ def login():
     if 'user_id' in session:
         return redirect(url_for('dashboard'))
     if request.method == 'POST':
+        ip    = request.remote_addr or 'unknown'
+        if is_rate_limited(f'login:{ip}', max_calls=5, window=60):
+            flash('Too many login attempts. Please wait a minute and try again.', 'error')
+            return render_template('login.html')
         email = request.form.get('email', '').strip().lower()
         pw    = request.form.get('password', '')
         db    = get_db()
@@ -1104,6 +1155,11 @@ def login():
         if not user or not check_pw(pw, user['password']):
             flash('Invalid email or password.', 'error')
             return render_template('login.html')
+        # Transparent bcrypt upgrade: if stored hash is legacy sha256, re-hash now
+        if BCRYPT_OK and user['password'] and not user['password'].startswith('$2'):
+            db.execute('UPDATE users SET password=? WHERE id=?',
+                       (hash_pw(pw), user['id']))
+            db.commit()
         session.permanent = True
         session['user_id'] = user['id']
         session['email']   = user['email']
