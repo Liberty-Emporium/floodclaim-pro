@@ -29,6 +29,29 @@ except Exception:
 
 app = Flask(__name__)
 
+def _get_secret_key():
+    env_key = os.environ.get('SECRET_KEY')
+    if env_key:
+        return env_key
+    data_dir = os.environ.get('RAILWAY_DATA_DIR') or os.environ.get('DATA_DIR') or '/data'
+    key_file = os.path.join(data_dir, 'secret_key')
+    try:
+        os.makedirs(data_dir, exist_ok=True)
+        if os.path.exists(key_file):
+            with open(key_file) as f:
+                key = f.read().strip()
+            if key:
+                return key
+        import secrets as _sec
+        key = _sec.token_hex(32)
+        with open(key_file, 'w') as f:
+            f.write(key)
+        return key
+    except Exception:
+        import secrets as _sec
+        return _sec.token_hex(32)
+
+
 # ── Secret key: stable across deploys ────────────────────────────────────────
 # Railway: set SECRET_KEY as an env var (one-time). Falls back to a file-based
 # key so at minimum it survives restarts on the same volume.
@@ -51,7 +74,7 @@ if not _SECRET_KEY:
         _svc = os.environ.get('RAILWAY_SERVICE_ID', 'floodclaim-pro-default')
         _SECRET_KEY = hashlib.sha256(f'floodclaim-secret-{_svc}'.encode()).hexdigest()
 
-app.secret_key = _SECRET_KEY
+app.secret_key = _get_secret_key()
 
 # ── Session config ────────────────────────────────────────────────────────────
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
