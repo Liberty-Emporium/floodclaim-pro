@@ -2,7 +2,8 @@
 {% block title %}Team — FloodClaim Pro{% endblock %}
 {% block page_title %}👥 Team Management{% endblock %}
 {% block content %}
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start">
+<style>@media(max-width:700px){.team-grid{grid-template-columns:1fr!important;}.table th:nth-child(2),.table td:nth-child(2){display:none}}</style>
+<div class="team-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start">
   <div class="card">
     <div class="card-header"><div class="card-title">Team Members</div></div>
     <div class="table-wrap"><table class="table">

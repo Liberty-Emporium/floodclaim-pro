@@ -11,6 +11,13 @@
     align-items: start;
   }
   @media (max-width: 850px) { .sched-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 500px) {
+    .slot-card { flex-direction: column; gap: .6rem; }
+    .slot-date-block { width: 100%; border-radius: 8px; padding: .4rem 1rem; display: flex; align-items: center; gap: 1rem; }
+    .slot-date-block .day { font-size: 1.2rem; }
+    .slot-actions { flex-direction: row; align-items: center; }
+    .slot-actions form select { font-size: .72rem; }
+  }
 
   .slot-card {
     display: flex; gap: 1rem; align-items: flex-start;

@@ -11,6 +11,12 @@
     align-items: start;
   }
   @media (max-width: 850px) { .notif-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 500px) {
+    .notif-row { flex-direction: column; gap: .5rem; }
+    .notif-icon { width: 28px; height: 28px; font-size: .85rem; }
+    .notif-msg { white-space: normal; }
+    .notif-meta { flex-direction: column; gap: .2rem; }
+  }
 
   .notif-row {
     display: flex; align-items: flex-start; gap: .9rem;

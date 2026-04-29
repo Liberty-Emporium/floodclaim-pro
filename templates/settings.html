@@ -33,6 +33,10 @@
     gap: .6rem;
     margin-top: .5rem;
   }
+  @media (max-width: 500px) {
+    .settings-section { max-width: 100%; }
+    .model-grid { grid-template-columns: 1fr; }
+  }
   .model-option { display: none; }
   .model-card {
     display: flex; flex-direction: column; gap: .2rem;

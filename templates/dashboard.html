@@ -21,7 +21,15 @@
     transition: border-color .2s;
   }
   .filter-bar .fc:focus { border-color: var(--teal); }
-  .search-wrap { flex: 1; min-width: 200px; }
+  .search-wrap { flex: 1; min-width: 160px; }
+  @media (max-width: 600px) {
+    .filter-bar { flex-direction: column; }
+    .filter-bar .fg, .search-wrap { width: 100%; min-width: unset; }
+    .filter-bar .fg:last-child { flex-direction: row; gap: .5rem; }
+    .filter-bar .fg:last-child .btn { flex: 1; }
+    .bulk-bar { flex-direction: column; align-items: stretch; }
+    .bulk-bar select, .bulk-bar .btn { width: 100%; }
+  }
   .search-input-wrap { position: relative; }
   .search-input-wrap .si {
     width: 100%; padding-left: 2.2rem;

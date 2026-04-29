@@ -59,6 +59,10 @@
   .grade-b { background: rgba(6,214,199,.12);  color: var(--teal);  border: 1px solid rgba(6,214,199,.3); }
   .grade-c { background: rgba(251,191,36,.12); color: var(--amber); border: 1px solid rgba(251,191,36,.3); }
   .grade-d { background: rgba(248,113,113,.1); color: var(--red);   border: 1px solid rgba(248,113,113,.3); }
+  @media (max-width: 700px) {
+    .compliance-layout { grid-template-columns: 1fr !important; }
+    .score-ring-wrap { padding: 1.25rem .75rem; }
+  }
 </style>
 {% endblock %}
 
@@ -78,7 +82,7 @@
   </div>
 </div>
 
-<div style="display:grid;grid-template-columns:240px 1fr;gap:1.5rem;align-items:start">
+<div class="compliance-layout" style="display:grid;grid-template-columns:240px 1fr;gap:1.5rem;align-items:start">
 
   <!-- Score ring -->
   <div class="card" style="margin:0">

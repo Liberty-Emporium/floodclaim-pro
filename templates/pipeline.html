@@ -11,7 +11,12 @@
     align-items: start;
   }
   @media (max-width: 900px) { .board { grid-template-columns: repeat(2, 1fr); } }
-  @media (max-width: 550px) { .board { grid-template-columns: 1fr; } }
+  @media (max-width: 550px) {
+    .board { grid-template-columns: 1fr; }
+    .claim-card .cn { font-size: .68rem; }
+    .claim-card .client { font-size: .84rem; }
+    .claim-card .addr { display: none; } /* hidden on tiny screens */
+  }
 
   .col-header {
     display: flex; align-items: center; justify-content: space-between;

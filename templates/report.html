@@ -41,6 +41,17 @@ td{padding:.6rem .75rem;border-bottom:1px solid #f1f5f9}
 .sig-label{font-size:.75rem;color:#64748b}
 .print-btn{position:fixed;bottom:2rem;right:2rem;background:#1e40af;color:#fff;border:none;padding:.75rem 1.5rem;border-radius:8px;font-size:.9rem;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 4px 15px rgba(30,64,175,.4)}
 @media print{.print-btn{display:none}body{padding:1rem}}
+@media(max-width:600px){
+  body{padding:.75rem;}
+  .info-grid{grid-template-columns:1fr;}
+  .photo-grid{grid-template-columns:1fr 1fr;}
+  .signature-section{grid-template-columns:1fr;gap:1.5rem;}
+  .info-row{flex-direction:column;gap:.15rem;}
+  .info-row label{min-width:unset;}
+  .room-header{flex-direction:column;align-items:flex-start;gap:.25rem;}
+  table{font-size:.78rem;}
+  table th,table td{padding:.4rem .5rem;}
+}
 </style>
 </head>
 <body>

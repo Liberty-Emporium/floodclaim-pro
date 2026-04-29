@@ -11,6 +11,11 @@
     margin-bottom: 1.5rem;
   }
   @media (max-width: 800px) { .plans-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 500px) {
+    .plan-card { padding: 1.25rem 1rem; }
+    .plan-price { font-size: 2rem; }
+    .sub-card { flex-direction: column; }
+  }
 
   .plan-card {
     background: var(--surface);

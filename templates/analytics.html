@@ -42,6 +42,14 @@
     align-items: start;
   }
   @media (max-width: 850px) { .charts-row { grid-template-columns: 1fr; } }
+  @media (max-width: 600px) {
+    .ana-grid { grid-template-columns: repeat(2, 1fr); gap: .75rem; }
+    .ana-card .val { font-size: 1.5rem; }
+    .ana-card .lbl { font-size: .65rem; }
+    .chart-wrap { height: 200px; }
+    .doughnut-wrap { width: 160px; height: 160px; }
+    .adj-row { font-size: .8rem; }
+  }
 
   .doughnut-wrap {
     position: relative; width: 200px; height: 200px;

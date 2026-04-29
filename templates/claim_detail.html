@@ -96,6 +96,24 @@
     .photo-card { flex-direction: column !important; }
     .photo-thumb-wrap, .photo-thumb-wrap img { width: 100% !important; height: 180px !important; flex: none; }
   }
+  /* Mobile: claim action buttons wrap nicely */
+  @media (max-width: 768px) {
+    .claim-actions { flex-wrap: wrap; gap: .4rem !important; }
+    .claim-actions .btn { flex: 1 1 auto; min-width: 80px; text-align: center; justify-content: center; }
+    .claim-actions form { flex: 1 1 auto; }
+    .claim-actions form .btn { width: 100%; }
+    .add-item-grid { grid-template-columns: 1fr 1fr !important; }
+    .add-item-grid .item-desc { grid-column: 1 / -1; }
+    .add-item-grid .item-submit { grid-column: 1 / -1; }
+    .add-item-grid .item-submit .btn { width: 100%; }
+    .room-header span:first-child { font-size: .85rem !important; }
+    .info-mini-grid { grid-template-columns: 1fr 1fr !important; }
+  }
+  @media (max-width: 480px) {
+    .add-item-grid { grid-template-columns: 1fr !important; }
+    .add-item-grid .item-desc { grid-column: 1; }
+    .add-item-grid .item-submit { grid-column: 1; }
+  }
 
   /* Edit modal */
   .modal-backdrop {
@@ -132,7 +150,7 @@
     <div style="font-size:1.3rem;font-weight:800;color:#0a1628">{{ claim.client_name }}</div>
     <div style="font-size:.9rem;color:#64748b;margin-top:.2rem">📍 {{ claim.property_address }}</div>
   </div>
-  <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center">
+  <div class="claim-actions" style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center">
     <form method="POST" action="{{ url_for('update_status', claim_id=claim.id) }}" style="display:flex;gap:.5rem;align-items:center">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <select name="status" class="form-control" style="width:auto;padding:.4rem .75rem;font-size:.85rem">
@@ -344,8 +362,8 @@
 
       <form method="POST" action="{{ url_for('add_item', room_id=rd.room.id) }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div style="display:grid;grid-template-columns:3fr 1fr 1fr 1fr auto;gap:.5rem;align-items:end">
-          <div class="form-group" style="margin:0">
+        <div class="add-item-grid" style="display:grid;grid-template-columns:3fr 1fr 1fr 1fr auto;gap:.5rem;align-items:end">
+          <div class="form-group item-desc" style="margin:0">
             <label style="font-size:.7rem">Description</label>
             <input class="form-control" type="text" name="description" placeholder="e.g. Drywall replacement" required/>
           </div>
@@ -363,7 +381,9 @@
             <label style="font-size:.7rem">Unit Cost $</label>
             <input class="form-control" type="number" name="unit_cost" value="0" step="0.01" min="0"/>
           </div>
-          <button type="submit" class="btn btn-amber btn-sm">+ Add</button>
+          <div class="item-submit">
+            <button type="submit" class="btn btn-amber btn-sm" style="width:100%">+ Add</button>
+          </div>
         </div>
       </form>
     </div>
@@ -678,8 +698,8 @@ function escHtml(s) {
 </script>
 
 <!-- AI Estimate Modal -->
-<div id="estimateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center;padding:1rem">
-  <div style="background:#fff;border-radius:14px;width:100%;max-width:780px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">
+<div id="estimateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center;padding:.5rem">
+  <div style="background:#fff;border-radius:14px;width:100%;max-width:780px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden">
     <div style="padding:1.25rem 1.5rem;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center">
       <div>
         <div style="font-size:1.1rem;font-weight:800">🤖 AI Adjuster Estimate</div>
