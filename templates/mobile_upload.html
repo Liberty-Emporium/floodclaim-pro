@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+  <title>Upload Photos — {{ claim.claim_number }}</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html{-webkit-font-smoothing:antialiased}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#060C1A;color:#E8F0FF;min-height:100vh}
+    .header{background:linear-gradient(135deg,#06D6C7,#3B7BFF);padding:1.5rem 1.25rem;text-align:center}
+    .header h1{font-size:1.3rem;font-weight:800;color:#fff}
+    .header p{font-size:.82rem;opacity:.85;color:#fff;margin-top:.25rem}
+    .container{padding:1.25rem}
+    .card{background:#0D1526;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:1.25rem;margin-bottom:1rem}
+    .label{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7A8BAD;margin-bottom:.45rem;display:block}
+    select,textarea{width:100%;background:#121E35;border:1px solid rgba(255,255,255,.07);border-radius:10px;color:#E8F0FF;font-size:.9rem;padding:.7rem .95rem;outline:none;font-family:inherit}
+    select:focus,textarea:focus{border-color:#06D6C7}
+    .upload-zone{border:2px dashed rgba(6,214,199,.3);border-radius:14px;padding:2.5rem 1rem;text-align:center;cursor:pointer;transition:all .2s;background:rgba(6,214,199,.03);position:relative}
+    .upload-zone:hover,.upload-zone.dragover{border-color:#06D6C7;background:rgba(6,214,199,.07)}
+    .upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+    .uz-icon{font-size:2.5rem;margin-bottom:.75rem}
+    .uz-text{font-size:.9rem;color:#7A8BAD}
+    .uz-sub{font-size:.75rem;color:#4A5568;margin-top:.35rem}
+    .preview-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-top:1rem}
+    .preview-item{position:relative;border-radius:10px;overflow:hidden;aspect-ratio:1}
+    .preview-item img{width:100%;height:100%;object-fit:cover;display:block}
+    .preview-remove{position:absolute;top:.3rem;right:.3rem;background:rgba(248,113,113,.9);border:none;color:#fff;border-radius:50%;width:22px;height:22px;font-size:.8rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
+    .btn-submit{width:100%;background:linear-gradient(135deg,#06D6C7,#3B7BFF);color:#fff;border:none;padding:1rem;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer;margin-top:1rem;font-family:inherit;transition:opacity .2s}
+    .btn-submit:disabled{opacity:.5;cursor:not-allowed}
+    .progress-wrap{display:none;margin-top:1rem}
+    .progress-bar{height:6px;background:rgba(255,255,255,.07);border-radius:999px;overflow:hidden;margin-top:.5rem}
+    .progress-fill{height:100%;background:linear-gradient(90deg,#06D6C7,#3B7BFF);border-radius:999px;width:0%;transition:width .3s}
+    .success-screen{display:none;text-align:center;padding:2rem 1rem}
+    .success-icon{font-size:4rem;margin-bottom:1rem}
+    .file-count{background:rgba(6,214,199,.1);border:1px solid rgba(6,214,199,.2);color:#06D6C7;border-radius:999px;padding:.3rem .85rem;font-size:.78rem;font-weight:700;display:inline-block;margin-top:.75rem}
+  </style>
+</head>
+<body>
+<div class="header">
+  <h1>📸 Upload Damage Photos</h1>
+  <p>{{ claim.claim_number }} · {{ claim.client_name }}</p>
+</div>
+
+<div class="container" id="main-form">
+  <!-- Claim info -->
+  <div class="card" style="font-size:.82rem;color:#7A8BAD;line-height:1.7">
+    📍 {{ claim.property_address }}<br>
+    📅 Flood date: {{ claim.flood_date }}
+  </div>
+
+  <!-- Room select -->
+  {% if rooms %}
+  <div class="card">
+    <label class="label">Which room? (optional)</label>
+    <select id="room-select">
+      <option value="">— General / No specific room —</option>
+      {% for r in rooms %}
+      <option value="{{ r.id }}">{{ r.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <!-- Caption -->
+  <div class="card">
+    <label class="label">Caption (optional)</label>
+    <textarea id="caption-input" rows="2" placeholder="e.g. Water damage on north wall, flooring buckled…"></textarea>
+  </div>
+
+  <!-- Upload zone -->
+  <div class="card">
+    <label class="label">Photos</label>
+    <div class="upload-zone" id="drop-zone">
+      <input type="file" id="file-input" multiple accept="image/*" capture="environment" onchange="handleFiles(this.files)">
+      <div class="uz-icon">📷</div>
+      <div class="uz-text">Tap to take or choose photos</div>
+      <div class="uz-sub">JPG, PNG, WEBP · Multiple OK</div>
+    </div>
+    <div class="preview-grid" id="preview-grid"></div>
+    <span class="file-count" id="file-count" style="display:none">0 photos selected</span>
+  </div>
+
+  <div class="progress-wrap" id="progress-wrap">
+    <div style="font-size:.82rem;color:#7A8BAD" id="progress-text">Uploading…</div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+  </div>
+
+  <button class="btn-submit" id="submit-btn" onclick="uploadPhotos()" disabled>
+    📤 Upload Photos
+  </button>
+</div>
+
+<!-- Success screen -->
+<div class="success-screen" id="success-screen">
+  <div class="success-icon">✅</div>
+  <h2 style="font-size:1.3rem;font-weight:800;margin-bottom:.5rem">Photos Uploaded!</h2>
+  <p style="color:#7A8BAD;font-size:.9rem">Your damage photos have been saved to the claim. The adjuster will review them shortly.</p>
+  <div style="margin-top:1.5rem">
+    <button onclick="location.reload()" style="background:rgba(6,214,199,.1);border:1px solid rgba(6,214,199,.2);color:#06D6C7;padding:.75rem 1.5rem;border-radius:10px;font-size:.9rem;font-weight:700;cursor:pointer;font-family:inherit">
+      📷 Upload More
+    </button>
+  </div>
+</div>
+
+<script>
+let selectedFiles = [];
+
+function handleFiles(files) {
+  selectedFiles = [...selectedFiles, ...Array.from(files)];
+  renderPreviews();
+}
+
+function renderPreviews() {
+  const grid = document.getElementById('preview-grid');
+  const count = document.getElementById('file-count');
+  const btn   = document.getElementById('submit-btn');
+  grid.innerHTML = '';
+  selectedFiles.forEach((f, i) => {
+    const url = URL.createObjectURL(f);
+    const div = document.createElement('div');
+    div.className = 'preview-item';
+    div.innerHTML = `<img src="${url}"><button class="preview-remove" onclick="removeFile(${i})">✕</button>`;
+    grid.appendChild(div);
+  });
+  count.style.display = selectedFiles.length ? 'inline-block' : 'none';
+  count.textContent   = selectedFiles.length + ' photo' + (selectedFiles.length !== 1 ? 's' : '') + ' selected';
+  btn.disabled = selectedFiles.length === 0;
+}
+
+function removeFile(idx) {
+  selectedFiles.splice(idx, 1);
+  renderPreviews();
+}
+
+async function uploadPhotos() {
+  const btn  = document.getElementById('submit-btn');
+  const prog = document.getElementById('progress-wrap');
+  const fill = document.getElementById('progress-fill');
+  const txt  = document.getElementById('progress-text');
+  btn.disabled = true;
+  prog.style.display = 'block';
+
+  const fd = new FormData();
+  selectedFiles.forEach(f => fd.append('photos', f));
+  fd.append('room_id', document.getElementById('room-select')?.value || '');
+  fd.append('caption', document.getElementById('caption-input')?.value || 'Mobile upload');
+
+  // Fake progress
+  let pct = 0;
+  const iv = setInterval(() => { pct = Math.min(pct + 8, 85); fill.style.width = pct + '%'; }, 200);
+
+  try {
+    const r = await fetch('{{ url_for("mobile_upload_post", claim_id=claim.id) }}?t={{ token }}', {
+      method: 'POST', body: fd
+    });
+    const d = await r.json();
+    clearInterval(iv);
+    fill.style.width = '100%';
+    txt.textContent  = `✅ ${d.saved} photo${d.saved !== 1 ? 's' : ''} saved!`;
+    setTimeout(() => {
+      document.getElementById('main-form').style.display = 'none';
+      document.getElementById('success-screen').style.display = 'block';
+    }, 800);
+  } catch(e) {
+    clearInterval(iv);
+    txt.textContent = '❌ Upload failed. Please try again.';
+    btn.disabled = false;
+  }
+}
+
+// Drag & drop
+const zone = document.getElementById('drop-zone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+</script>
+</body>
+</html>

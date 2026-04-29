@@ -145,6 +145,12 @@
     <a href="{{ url_for('report', claim_id=claim.id) }}" class="btn btn-cyan btn-sm" target="_blank">📄 Report</a>
     <a href="{{ url_for('compliance', claim_id=claim.id) }}" class="btn btn-amber btn-sm">✅ NFIP Check</a>
     <button class="btn btn-success btn-sm" onclick="runAIEstimate()">🤖 AI Estimate</button>
+    <a href="{{ url_for('claim_qr', claim_id=claim.id) }}" class="btn btn-ghost btn-sm">📱 QR Upload</a>
+    <a href="{{ url_for('claim_activity', claim_id=claim.id) }}" class="btn btn-ghost btn-sm">📜 Activity</a>
+    <form method="POST" action="{{ url_for('duplicate_claim', claim_id=claim.id) }}" style="display:inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-ghost btn-sm" onclick="return confirm('Duplicate this claim?')">⧉ Duplicate</button>
+    </form>
     <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-sm">← Back</a>
     <form method="POST" action="{{ url_for('delete_claim', claim_id=claim.id) }}"
           onsubmit="return confirm('Delete claim {{ claim.claim_number }} ({{ claim.client_name }})? This will permanently remove all rooms, photos, and line items.')">

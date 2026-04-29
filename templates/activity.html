@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block title %}Activity — {{ claim.claim_number }}{% endblock %}
+{% block page_title %}📜 Activity Log{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem">
+  <div>
+    <div style="font-weight:800;font-size:1.1rem">{{ claim.client_name }}</div>
+    <div style="font-size:.85rem;color:var(--t-secondary)">{{ claim.claim_number }} · {{ claim.property_address }}</div>
+  </div>
+  <a href="{{ url_for('claim_detail', claim_id=claim.id) }}" class="btn btn-ghost btn-sm">← Back to Claim</a>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">📜 Audit Trail</div>
+    <span style="font-size:.78rem;color:var(--t-secondary)">{{ logs|length }} events</span>
+  </div>
+
+  {% if logs %}
+  <div style="position:relative;padding-left:1.5rem">
+    <!-- Timeline line -->
+    <div style="position:absolute;left:.6rem;top:0;bottom:0;width:2px;background:var(--border)"></div>
+
+    {% for log in logs %}
+    <div style="position:relative;padding:.75rem 0 .75rem 1.5rem;border-bottom:1px solid var(--border)">
+      <!-- Dot -->
+      <div style="position:absolute;left:-.3rem;top:1rem;width:10px;height:10px;border-radius:50%;
+                  background:var(--teal);border:2px solid var(--bg)"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+        <div>
+          <div style="font-size:.88rem;color:var(--t-primary);font-weight:500">{{ log.action }}</div>
+          <div style="font-size:.72rem;color:var(--t-muted);margin-top:.15rem">
+            👤 {{ log.actor }} · 🕐 {{ log.created_at[:16] }}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div style="text-align:center;padding:3rem;color:var(--t-muted)">
+    <div style="font-size:2.5rem;margin-bottom:.75rem">📭</div>
+    <div style="font-weight:600">No activity recorded yet</div>
+    <div style="font-size:.82rem;margin-top:.4rem">Events like status changes and edits will appear here.</div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

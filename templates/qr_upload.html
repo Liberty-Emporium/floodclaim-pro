@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block title %}QR Photo Upload — {{ claim.claim_number }}{% endblock %}
+{% block page_title %}📱 Mobile Photo Upload{% endblock %}
+
+{% block content %}
+<div style="max-width:520px;margin:0 auto">
+  <div class="card" style="text-align:center">
+    <div class="card-header">
+      <div class="card-title">📱 Scan to Upload Photos</div>
+      <a href="{{ url_for('claim_detail', claim_id=claim.id) }}" class="btn btn-ghost btn-sm">← Back</a>
+    </div>
+
+    <div style="padding:1.5rem">
+      <div style="font-size:.88rem;color:var(--t-secondary);margin-bottom:1.5rem;line-height:1.6">
+        Share this QR code with anyone on-site (client, contractor, adjuster) to let them
+        upload damage photos directly from their phone — <strong>no login required.</strong>
+      </div>
+
+      <!-- QR Code -->
+      <div style="background:#fff;border-radius:16px;padding:1.5rem;display:inline-block;margin-bottom:1.5rem;box-shadow:0 4px 24px rgba(0,0,0,.15)">
+        <img src="{{ qr_img_url }}" alt="QR Code" style="width:220px;height:220px;display:block">
+      </div>
+
+      <div style="margin-bottom:1.5rem">
+        <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t-secondary);margin-bottom:.5rem">Or share this link</div>
+        <div style="background:var(--elevated);border:1px solid var(--border);border-radius:10px;padding:.75rem 1rem;font-size:.8rem;font-family:monospace;color:var(--teal);word-break:break-all;text-align:left">
+          {{ upload_url }}
+        </div>
+        <button onclick="navigator.clipboard.writeText('{{ upload_url }}').then(()=>this.textContent='✅ Copied!')"
+                class="btn btn-ghost btn-sm" style="margin-top:.6rem">📋 Copy Link</button>
+      </div>
+
+      <div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:10px;padding:.85rem 1rem;font-size:.8rem;color:var(--amber);text-align:left;line-height:1.6">
+        <strong>Claim:</strong> {{ claim.claim_number }}<br>
+        <strong>Client:</strong> {{ claim.client_name }}<br>
+        <strong>Property:</strong> {{ claim.property_address }}
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:1rem">
+    <div class="card-header"><div class="card-title">ℹ️ How It Works</div></div>
+    <div style="font-size:.85rem;color:var(--t-secondary);line-height:1.8;padding:.5rem 0">
+      1. Show this QR to anyone with a phone 📱<br>
+      2. They scan it — opens a simple upload page<br>
+      3. They take or pick photos from camera roll<br>
+      4. Photos save directly to this claim with AI analysis<br>
+      5. You see them instantly in the claim detail page
+    </div>
+  </div>
+</div>
+{% endblock %}

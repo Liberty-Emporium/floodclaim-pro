@@ -224,6 +224,68 @@
     {% endif %}
   </div>
 
+  <!-- Twilio SMS -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">📱 SMS Notifications (Twilio)</div>
+      {% set twilio_set = get_setting('twilio_account_sid') %}
+      {% if twilio_set %}
+        <span class="key-status key-set">✅ Configured</span>
+      {% else %}
+        <span class="key-status key-unset">⚠️ Not Configured</span>
+      {% endif %}
+    </div>
+    <div class="info-box">
+      Configure <strong>Twilio</strong> to send SMS updates to clients automatically when claim status changes.
+      Get credentials at <strong>twilio.com</strong>.
+    </div>
+    <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Account SID</label>
+          <input class="form-control" type="password" name="twilio_account_sid" placeholder="ACxxxxxxxx...">
+        </div>
+        <div class="form-group">
+          <label>Auth Token</label>
+          <input class="form-control" type="password" name="twilio_auth_token" placeholder="Your auth token">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>From Number (E.164 format)</label>
+        <input class="form-control" type="text" name="twilio_from_number" placeholder="+15551234567">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">💾 Save Twilio Settings</button>
+    </form>
+  </div>
+
+  <!-- Weekly Report -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">📧 Weekly Summary Report</div>
+    </div>
+    <div class="info-box">
+      Send a weekly email summary to yourself: new claims, closed claims, pipeline value.
+      Requires SendGrid configured above.
+    </div>
+    <div class="form-group">
+      <label>Report Email</label>
+      <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input class="form-control" type="email" name="admin_report_email"
+               placeholder="your@email.com" style="margin-bottom:.75rem">
+        <button type="submit" class="btn btn-ghost btn-sm">💾 Save Email</button>
+      </form>
+    </div>
+    <form method="POST" action="{{ url_for('send_weekly_report') }}" style="margin-top:1rem">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-primary btn-sm"
+              onclick="return confirm('Send weekly report now?')">
+        📧 Send Weekly Report Now
+      </button>
+    </form>
+  </div>
+
   <!-- How It Works -->
   <div class="card">
     <div class="card-header">

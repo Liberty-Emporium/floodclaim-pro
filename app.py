@@ -348,7 +348,7 @@ def migrate_new_features():
             );
             CREATE TABLE IF NOT EXISTS stripe_customers (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id         INTEGER REFERENCES users(id),
+                user_id         INTEGER UNIQUE REFERENCES users(id),
                 stripe_customer TEXT,
                 stripe_sub_id   TEXT,
                 plan            TEXT DEFAULT 'basic',
@@ -408,7 +408,7 @@ migrate_photos_columns()
 
 
 def migrate_new_features_v2():
-    """Add tables for Kanban, Scheduler, Notifications, Analytics — safe to run every boot."""
+    """Add tables for Kanban, Scheduler, Notifications, Analytics, Activity Log — safe to run every boot."""
     try:
         db = sqlite3.connect(DB_PATH)
         db.executescript('''
@@ -430,6 +430,13 @@ def migrate_new_features_v2():
                 message     TEXT NOT NULL,
                 sent_at     TEXT DEFAULT CURRENT_TIMESTAMP,
                 status      TEXT DEFAULT 'sent'
+            );
+            CREATE TABLE IF NOT EXISTS activity_log (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id    INTEGER REFERENCES claims(id) ON DELETE CASCADE,
+                actor       TEXT NOT NULL DEFAULT 'System',
+                action      TEXT NOT NULL,
+                created_at  TEXT DEFAULT CURRENT_TIMESTAMP
             );
         ''')
         # Add inspection_date + kanban_order columns to claims if missing
@@ -560,6 +567,8 @@ def get_setting(key, default=''):
         return row['value'] if row else default
     except Exception:
         return default
+
+app.jinja_env.globals['get_setting'] = get_setting
 
 def set_setting(key, value):
     db = sqlite3.connect(DB_PATH)
@@ -1138,23 +1147,102 @@ def get_signature(claim_id):
 
 
 # ── Stripe Subscriptions ──────────────────────────────────────────────────────
+STRIPE_PLANS = [
+    {'id': 'basic',  'name': 'Basic',  'price': '$49/mo',  'price_cents': 4900,
+     'features': ['25 claims/mo', 'PDF export', 'Willie AI', 'Client portal', 'NFIP Compliance']},
+    {'id': 'pro',    'name': 'Pro',    'price': '$99/mo',  'price_cents': 9900,
+     'features': ['100 claims/mo', 'Everything in Basic', 'Xactimate export', 'Analytics', 'Priority support']},
+    {'id': 'agency', 'name': 'Agency', 'price': '$249/mo', 'price_cents': 24900,
+     'features': ['Unlimited claims', 'Everything in Pro', 'Multi-adjuster team', 'White-label reports', 'SMS alerts']},
+]
+
 @app.route('/billing')
 @login_required
 def billing():
-    plans = [
-        {'id': 'basic',  'name': 'Basic',  'price': '$49/mo',  'features': ['25 claims/mo', 'PDF export', 'Willie AI', 'Client portal']},
-        {'id': 'pro',    'name': 'Pro',    'price': '$99/mo',  'features': ['100 claims/mo', 'Everything in Basic', 'Xactimate export', 'Priority support']},
-        {'id': 'agency', 'name': 'Agency', 'price': '$249/mo', 'features': ['Unlimited claims', 'Everything in Pro', 'Multi-adjuster team', 'White-label reports']},
-    ]
-    return render_template('billing.html', plans=plans, sub=None)
-
+    db  = get_db()
+    sub = db.execute('SELECT * FROM stripe_customers WHERE user_id=?', (session['user_id'],)).fetchone()
+    stripe_pub = get_setting('stripe_publishable_key') or os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
+    return render_template('billing.html', plans=STRIPE_PLANS, sub=sub, stripe_pub=stripe_pub)
 
 @app.route('/billing/checkout', methods=['POST'])
 @login_required
 @csrf_required
 def billing_checkout():
-    flash('Stripe integration coming soon — add STRIPE_SECRET_KEY in Settings to activate.', 'info')
+    plan_id    = request.form.get('plan', 'basic')
+    stripe_key = get_setting('stripe_secret_key') or os.environ.get('STRIPE_SECRET_KEY', '')
+    if not stripe_key or not STRIPE_OK:
+        flash('Stripe not configured — add your STRIPE_SECRET_KEY in Settings first.', 'error')
+        return redirect(url_for('billing'))
+    try:
+        _stripe.api_key = stripe_key
+        plan = next((p for p in STRIPE_PLANS if p['id'] == plan_id), STRIPE_PLANS[0])
+        checkout = _stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[{'price_data': {
+                'currency': 'usd',
+                'product_data': {'name': f'FloodClaim Pro — {plan["name"]} Plan'},
+                'unit_amount': plan['price_cents'],
+                'recurring': {'interval': 'month'},
+            }, 'quantity': 1}],
+            mode='subscription',
+            success_url=url_for('billing_success', _external=True) + '?session_id={CHECKOUT_SESSION_ID}',
+            cancel_url=url_for('billing', _external=True),
+            customer_email=session.get('email', ''),
+            metadata={'user_id': str(session['user_id']), 'plan': plan_id},
+        )
+        return redirect(checkout.url, code=303)
+    except Exception as e:
+        flash(f'Stripe error: {e}', 'error')
+        return redirect(url_for('billing'))
+
+@app.route('/billing/success')
+@login_required
+def billing_success():
+    session_id = request.args.get('session_id', '')
+    stripe_key = get_setting('stripe_secret_key') or os.environ.get('STRIPE_SECRET_KEY', '')
+    if session_id and stripe_key and STRIPE_OK:
+        try:
+            _stripe.api_key = stripe_key
+            cs = _stripe.checkout.Session.retrieve(session_id)
+            plan_id = cs.get('metadata', {}).get('plan', 'basic')
+            db = get_db()
+            db.execute('''
+                INSERT INTO stripe_customers (user_id, stripe_customer, stripe_sub_id, plan, status)
+                VALUES (?,?,?,?,?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                  stripe_customer=excluded.stripe_customer,
+                  stripe_sub_id=excluded.stripe_sub_id,
+                  plan=excluded.plan, status=excluded.status
+            ''', (session['user_id'], cs.get('customer',''), cs.get('subscription',''), plan_id, 'active'))
+            db.commit()
+        except Exception:
+            pass
+    flash('🎉 Subscription activated! Welcome to FloodClaim Pro.', 'success')
     return redirect(url_for('billing'))
+
+@app.route('/billing/portal', methods=['POST'])
+@login_required
+@csrf_required
+def billing_portal():
+    stripe_key = get_setting('stripe_secret_key') or os.environ.get('STRIPE_SECRET_KEY', '')
+    if not stripe_key or not STRIPE_OK:
+        flash('Stripe not configured.', 'error')
+        return redirect(url_for('billing'))
+    db  = get_db()
+    sub = db.execute('SELECT * FROM stripe_customers WHERE user_id=?', (session['user_id'],)).fetchone()
+    if not sub or not sub['stripe_customer']:
+        flash('No active subscription found.', 'error')
+        return redirect(url_for('billing'))
+    try:
+        _stripe.api_key = stripe_key
+        portal = _stripe.billing_portal.Session.create(
+            customer=sub['stripe_customer'],
+            return_url=url_for('billing', _external=True)
+        )
+        return redirect(portal.url, code=303)
+    except Exception as e:
+        flash(f'Stripe portal error: {e}', 'error')
+        return redirect(url_for('billing'))
 
 def call_openrouter(messages, model, key, max_tokens=4000):
     """Call OpenRouter chat completions API. Returns response text or error string."""
@@ -1286,26 +1374,61 @@ def logout():
 @login_required
 def dashboard():
     db = get_db()
+    # Search + filter params
+    q          = request.args.get('q', '').strip()
+    f_status   = request.args.get('status', '')
+    f_adjuster = request.args.get('adjuster_id', '')
+    f_priority = request.args.get('priority', '')
+    f_date_from= request.args.get('date_from', '')
+    f_date_to  = request.args.get('date_to', '')
+
+    base_sql = '''SELECT c.*, u.name as adjuster_name
+        FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE 1=1'''
+    params = []
+    if session['role'] != 'admin':
+        base_sql += ' AND c.adjuster_id=?'
+        params.append(session['user_id'])
+    if q:
+        base_sql += ' AND (c.client_name LIKE ? OR c.claim_number LIKE ? OR c.property_address LIKE ?)'
+        like = f'%{q}%'
+        params += [like, like, like]
+    if f_status:
+        base_sql += ' AND c.status=?'
+        params.append(f_status)
+    if f_adjuster and session['role'] == 'admin':
+        base_sql += ' AND c.adjuster_id=?'
+        params.append(f_adjuster)
+    if f_priority:
+        base_sql += ' AND c.priority=?'
+        params.append(f_priority)
+    if f_date_from:
+        base_sql += ' AND c.flood_date >= ?'
+        params.append(f_date_from)
+    if f_date_to:
+        base_sql += ' AND c.flood_date <= ?'
+        params.append(f_date_to)
+    base_sql += ' ORDER BY c.created_at DESC'
+    claims = db.execute(base_sql, params).fetchall()
+
+    # Stats always from full set (no filters)
     if session['role'] == 'admin':
-        claims = db.execute('''SELECT c.*, u.name as adjuster_name
-            FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id
-            ORDER BY c.created_at DESC''').fetchall()
+        all_claims = db.execute('SELECT status, total_estimate FROM claims').fetchall()
     else:
-        claims = db.execute('''SELECT c.*, u.name as adjuster_name
-            FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id
-            WHERE c.adjuster_id=? ORDER BY c.created_at DESC''',
-            (session['user_id'],)).fetchall()
+        all_claims = db.execute('SELECT status, total_estimate FROM claims WHERE adjuster_id=?',
+                                (session['user_id'],)).fetchall()
     stats = {
-        'total':       len(claims),
-        'new':         sum(1 for c in claims if c['status'] == 'New'),
-        'in_progress': sum(1 for c in claims if c['status'] == 'In Progress'),
-        'submitted':   sum(1 for c in claims if c['status'] == 'Submitted'),
-        'closed':      sum(1 for c in claims if c['status'] == 'Closed'),
-        'pipeline':    sum(c['total_estimate'] for c in claims if c['status'] != 'Closed'),
+        'total':       len(all_claims),
+        'new':         sum(1 for c in all_claims if c['status'] == 'New'),
+        'in_progress': sum(1 for c in all_claims if c['status'] == 'In Progress'),
+        'submitted':   sum(1 for c in all_claims if c['status'] == 'Submitted'),
+        'closed':      sum(1 for c in all_claims if c['status'] == 'Closed'),
+        'pipeline':    sum(c['total_estimate'] for c in all_claims if c['status'] != 'Closed'),
     }
     adjusters = db.execute('SELECT * FROM users ORDER BY name').fetchall() \
                 if session['role'] == 'admin' else []
-    return render_template('dashboard.html', claims=claims, stats=stats, adjusters=adjusters)
+    return render_template('dashboard.html', claims=claims, stats=stats, adjusters=adjusters,
+                           q=q, f_status=f_status, f_adjuster=f_adjuster,
+                           f_priority=f_priority, f_date_from=f_date_from, f_date_to=f_date_to)
 
 @app.route('/claims/new', methods=['GET', 'POST'])
 @login_required
@@ -1432,6 +1555,7 @@ def update_status(claim_id):
     db.commit()
     if claim:
         notify_client_status_change(claim, status)
+        _log_activity(claim_id, f'Status changed to {status}')
     return redirect(url_for('claim_detail', claim_id=claim_id))
 
 @app.route('/claims/<int:claim_id>/room/add', methods=['POST'])
@@ -1640,7 +1764,8 @@ def settings():
         # New integration keys
         for key in ['sendgrid_api_key', 'from_email', 'stripe_secret_key',
                     'stripe_publishable_key', 'google_maps_api_key',
-                    'twilio_account_sid', 'twilio_auth_token', 'twilio_from_number']:
+                    'twilio_account_sid', 'twilio_auth_token', 'twilio_from_number',
+                    'admin_report_email']:
             val = request.form.get(key, '').strip()
             if val:
                 set_setting(key, val)
@@ -2801,6 +2926,337 @@ def ai_describe_photo_detailed(image_path, key, model):
         return r.json()['choices'][0]['message']['content']
     except Exception:
         return ''
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CLAIM DUPLICATE
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/claims/<int:claim_id>/duplicate', methods=['POST'])
+@login_required
+@csrf_required
+def duplicate_claim(claim_id):
+    db    = get_db()
+    src   = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not src:
+        flash('Claim not found.', 'error')
+        return redirect(url_for('dashboard'))
+    new_num = gen_claim_number()
+    db.execute('''
+        INSERT INTO claims
+          (claim_number, adjuster_id, client_name, client_phone, client_phone_alt, client_email,
+           property_address, property_type, property_sqft, year_built, num_floors,
+           flood_date, flood_source, water_category, water_class, water_depth_in,
+           date_water_removed, inspection_date, insurance_company, policy_number, policy_type,
+           coverage_building, coverage_contents, deductible, mortgage_company, mortgage_loan_number,
+           cause_of_loss, priority, notes, flood_zone, fema_map_number)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ''', (new_num, src['adjuster_id'], src['client_name'], src['client_phone'],
+          src['client_phone_alt'], src['client_email'], src['property_address'],
+          src['property_type'], src['property_sqft'], src['year_built'], src['num_floors'],
+          src['flood_date'], src['flood_source'], src['water_category'], src['water_class'],
+          src['water_depth_in'], src['date_water_removed'], src['inspection_date'],
+          src['insurance_company'], src['policy_number'], src['policy_type'],
+          src['coverage_building'], src['coverage_contents'], src['deductible'],
+          src['mortgage_company'], src['mortgage_loan_number'],
+          src['cause_of_loss'], src['priority'],
+          f'[Duplicated from {src["claim_number"]}] {src["notes"]}',
+          src['flood_zone'], src['fema_map_number']))
+    db.commit()
+    new_claim = db.execute('SELECT id FROM claims WHERE claim_number=?', (new_num,)).fetchone()
+    # Copy rooms + line items (not photos)
+    rooms = db.execute('SELECT * FROM rooms WHERE claim_id=?', (claim_id,)).fetchall()
+    for room in rooms:
+        db.execute('INSERT INTO rooms (claim_id, name, description) VALUES (?,?,?)',
+                   (new_claim['id'], room['name'], room['description']))
+        db.commit()
+        new_room = db.execute('SELECT id FROM rooms WHERE claim_id=? ORDER BY id DESC LIMIT 1',
+                              (new_claim['id'],)).fetchone()
+        items = db.execute('SELECT * FROM line_items WHERE room_id=?', (room['id'],)).fetchall()
+        for item in items:
+            db.execute('INSERT INTO line_items (room_id, description, quantity, unit, unit_cost, total) VALUES (?,?,?,?,?,?)',
+                       (new_room['id'], item['description'], item['quantity'], item['unit'], item['unit_cost'], item['total']))
+    db.commit()
+    recalc_claim(new_claim['id'])
+    _log_activity(new_claim['id'], 'Claim duplicated from ' + src['claim_number'])
+    flash(f'Claim duplicated as {new_num}.', 'success')
+    return redirect(url_for('claim_detail', claim_id=new_claim['id']))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ACTIVITY / AUDIT LOG
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _log_activity(claim_id, action, user_name=None):
+    """Write an entry to the claim activity log."""
+    try:
+        db   = get_db()
+        who  = user_name or session.get('name', 'System')
+        db.execute(
+            'INSERT INTO activity_log (claim_id, actor, action) VALUES (?,?,?)',
+            (claim_id, who, action)
+        )
+        db.commit()
+    except Exception as e:
+        print(f'_log_activity error: {e}')
+
+
+@app.route('/claims/<int:claim_id>/activity')
+@login_required
+def claim_activity(claim_id):
+    db    = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim:
+        flash('Claim not found.', 'error')
+        return redirect(url_for('dashboard'))
+    logs = db.execute(
+        'SELECT * FROM activity_log WHERE claim_id=? ORDER BY created_at DESC LIMIT 100',
+        (claim_id,)
+    ).fetchall()
+    return render_template('activity.html', claim=claim, logs=logs)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SMS VIA TWILIO
+# ─────────────────────────────────────────────────────────────────────────────
+
+def send_sms(to_number, body):
+    """Send SMS via Twilio. Returns True on success."""
+    sid   = get_setting('twilio_account_sid')  or os.environ.get('TWILIO_ACCOUNT_SID', '')
+    token = get_setting('twilio_auth_token')   or os.environ.get('TWILIO_AUTH_TOKEN', '')
+    from_ = get_setting('twilio_from_number')  or os.environ.get('TWILIO_FROM_NUMBER', '')
+    if not sid or not token or not from_:
+        print(f'[SMS] Twilio not configured. To: {to_number} | {body}')
+        return False
+    try:
+        r = _req.post(
+            f'https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json',
+            auth=(sid, token),
+            data={'From': from_, 'To': to_number, 'Body': body},
+            timeout=10
+        )
+        return r.status_code in (200, 201)
+    except Exception as e:
+        print(f'Twilio error: {e}')
+        return False
+
+
+def notify_client_sms(claim, message):
+    """Send SMS to client if they have a phone number."""
+    phone = claim['client_phone'] or claim['client_phone_alt'] or ''
+    if not phone:
+        return False
+    # Normalize to E.164 (basic: strip non-digits, add +1 for US)
+    digits = ''.join(c for c in phone if c.isdigit())
+    if len(digits) == 10:
+        digits = '1' + digits
+    if not digits.startswith('1') or len(digits) != 11:
+        return False
+    e164 = '+' + digits
+    sent = send_sms(e164, message)
+    if sent:
+        _log_notification(claim['id'], 'sms', e164, message)
+    return sent
+
+
+@app.route('/claims/<int:claim_id>/sms', methods=['POST'])
+@login_required
+@csrf_required
+def send_claim_sms(claim_id):
+    """Manually send an SMS update to the claim client."""
+    db    = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim:
+        return jsonify({'ok': False, 'error': 'Claim not found'}), 404
+    msg = request.form.get('message', '').strip()
+    if not msg:
+        return jsonify({'ok': False, 'error': 'Message required'}), 400
+    full_msg = f'FloodClaim Pro | {claim["claim_number"]}: {msg}'
+    sent = notify_client_sms(claim, full_msg)
+    if sent:
+        flash(f'SMS sent to {claim["client_phone"]}.', 'success')
+    else:
+        flash('SMS not sent — configure Twilio in Settings.', 'error')
+    return redirect(url_for('claim_detail', claim_id=claim_id))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MOBILE PHOTO UPLOAD (QR code portal)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/claims/<int:claim_id>/mobile-upload')
+def mobile_upload_page(claim_id):
+    """Public mobile upload page — no login, accessed via QR code."""
+    token = request.args.get('t', '')
+    db    = get_db()
+    # Validate token matches claim
+    row = db.execute(
+        'SELECT claim_id FROM client_portal_tokens WHERE token=? AND claim_id=?',
+        (token, claim_id)
+    ).fetchone()
+    if not row:
+        return '<h2 style="font-family:sans-serif;text-align:center;margin-top:4rem">Link expired or invalid.</h2>', 403
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    return render_template('mobile_upload.html', claim=claim, rooms=rooms, token=token)
+
+
+@app.route('/claims/<int:claim_id>/mobile-upload', methods=['POST'])
+def mobile_upload_post(claim_id):
+    """Accept photo uploads from mobile upload page."""
+    token = request.args.get('t', '')
+    db    = get_db()
+    row = db.execute(
+        'SELECT claim_id FROM client_portal_tokens WHERE token=? AND claim_id=?',
+        (token, claim_id)
+    ).fetchone()
+    if not row:
+        return jsonify({'ok': False, 'error': 'Invalid token'}), 403
+    files   = request.files.getlist('photos')
+    room_id = request.form.get('room_id') or None
+    caption = request.form.get('caption', 'Mobile upload')
+    saved   = 0
+    for f in files:
+        if f and allowed_file(f.filename):
+            ext      = f.filename.rsplit('.', 1)[1].lower()
+            filename = f'{secrets.token_hex(12)}.{ext}'
+            path     = os.path.join(UPLOAD_DIR, filename)
+            f.save(path)
+            ai_desc = ai_describe_photo(path)
+            db.execute(
+                'INSERT INTO photos (claim_id, room_id, filename, caption, ai_description) VALUES (?,?,?,?,?)',
+                (claim_id, room_id, filename, caption, ai_desc)
+            )
+            saved += 1
+    db.commit()
+    return jsonify({'ok': True, 'saved': saved})
+
+
+@app.route('/claims/<int:claim_id>/qr')
+@login_required
+def claim_qr(claim_id):
+    """Show a QR code for mobile photo upload — generates/reuses the portal token."""
+    db    = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim:
+        flash('Claim not found.', 'error')
+        return redirect(url_for('dashboard'))
+    # Reuse or create portal token
+    row = db.execute('SELECT token FROM client_portal_tokens WHERE claim_id=?', (claim_id,)).fetchone()
+    if row:
+        token = row['token']
+    else:
+        token = secrets.token_urlsafe(32)
+        db.execute('INSERT INTO client_portal_tokens (claim_id, token) VALUES (?,?)', (claim_id, token))
+        db.commit()
+    upload_url = url_for('mobile_upload_page', claim_id=claim_id, t=token, _external=True)
+    # Generate QR as SVG using a simple URL-based QR service (no lib needed)
+    qr_img_url = f'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={upload_url}'
+    return render_template('qr_upload.html', claim=claim, upload_url=upload_url, qr_img_url=qr_img_url)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BULK ACTIONS + DASHBOARD SEARCH
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/claims/bulk', methods=['POST'])
+@login_required
+@csrf_required
+def bulk_action():
+    action   = request.form.get('bulk_action', '')
+    ids_raw  = request.form.getlist('claim_ids')
+    ids      = [int(i) for i in ids_raw if i.isdigit()]
+    if not ids:
+        flash('No claims selected.', 'error')
+        return redirect(url_for('dashboard'))
+    db = get_db()
+    if action == 'delete':
+        for cid in ids:
+            photos = db.execute('SELECT filename FROM photos WHERE claim_id=?', (cid,)).fetchall()
+            for p in photos:
+                try:
+                    path = os.path.join(UPLOAD_DIR, p['filename'])
+                    if os.path.exists(path): os.remove(path)
+                except Exception: pass
+            db.execute('DELETE FROM claims WHERE id=?', (cid,))
+        db.commit()
+        flash(f'Deleted {len(ids)} claim(s).', 'success')
+    elif action in ('set_new', 'set_in_progress', 'set_submitted', 'set_closed'):
+        status_map = {'set_new': 'New', 'set_in_progress': 'In Progress',
+                      'set_submitted': 'Submitted', 'set_closed': 'Closed'}
+        new_status = status_map[action]
+        for cid in ids:
+            claim = db.execute('SELECT * FROM claims WHERE id=?', (cid,)).fetchone()
+            db.execute('UPDATE claims SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+                       (new_status, cid))
+            if claim and claim['client_email']:
+                notify_client_status_change(claim, new_status)
+        db.commit()
+        flash(f'Updated {len(ids)} claim(s) to “{new_status}”.', 'success')
+    elif action == 'assign':
+        adj_id = request.form.get('assign_adjuster')
+        if adj_id:
+            for cid in ids:
+                db.execute('UPDATE claims SET adjuster_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+                           (adj_id, cid))
+            db.commit()
+            flash(f'Assigned {len(ids)} claim(s).', 'success')
+    else:
+        flash('Unknown action.', 'error')
+    return redirect(url_for('dashboard'))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WEEKLY SUMMARY REPORT (email)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/admin/weekly-report', methods=['POST'])
+@login_required
+@admin_required
+@csrf_required
+def send_weekly_report():
+    db     = get_db()
+    claims = db.execute('SELECT * FROM claims').fetchall()
+    week_ago = (datetime.datetime.now() - datetime.timedelta(days=7)).isoformat()
+    new_this_week    = [c for c in claims if c['created_at'] >= week_ago]
+    closed_this_week = [c for c in claims if c['status'] == 'Closed' and c['updated_at'] >= week_ago]
+    open_claims      = [c for c in claims if c['status'] != 'Closed']
+    pipeline         = sum(c['total_estimate'] for c in open_claims)
+    admin_email      = get_setting('admin_report_email') or ADMIN_EMAIL
+    html = f'''
+    <div style="font-family:sans-serif;max-width:640px;margin:0 auto">
+      <div style="background:#0a1628;color:#fff;padding:1.5rem 2rem;border-radius:12px 12px 0 0">
+        <h2 style="margin:0;font-size:1.3rem">FloodClaim Pro — Weekly Summary</h2>
+        <p style="margin:.25rem 0 0;opacity:.7;font-size:.85rem">{datetime.datetime.now().strftime("%B %d, %Y")}</p>
+      </div>
+      <div style="background:#f8fafc;padding:1.5rem 2rem;border:1px solid #e2e8f0;border-top:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem">
+          <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:1rem;text-align:center">
+            <div style="font-size:1.8rem;font-weight:800;color:#3b82f6">{len(new_this_week)}</div>
+            <div style="font-size:.75rem;color:#64748b;font-weight:700;text-transform:uppercase">New This Week</div>
+          </div>
+          <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:1rem;text-align:center">
+            <div style="font-size:1.8rem;font-weight:800;color:#10b981">{len(closed_this_week)}</div>
+            <div style="font-size:.75rem;color:#64748b;font-weight:700;text-transform:uppercase">Closed This Week</div>
+          </div>
+          <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:1rem;text-align:center">
+            <div style="font-size:1.8rem;font-weight:800;color:#f59e0b">{len(open_claims)}</div>
+            <div style="font-size:.75rem;color:#64748b;font-weight:700;text-transform:uppercase">Open Claims</div>
+          </div>
+          <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:1rem;text-align:center">
+            <div style="font-size:1.8rem;font-weight:800;color:#6366f1">${pipeline:,.0f}</div>
+            <div style="font-size:.75rem;color:#64748b;font-weight:700;text-transform:uppercase">Pipeline Value</div>
+          </div>
+        </div>
+        <p style="font-size:.85rem;color:#64748b">Log in to <a href="https://billy-floods.up.railway.app">FloodClaim Pro</a> to view full details.</p>
+      </div>
+    </div>'''
+    sent = send_email(admin_email, f'FloodClaim Pro — Weekly Report ({datetime.datetime.now().strftime("%b %d")})', html)
+    if sent:
+        flash(f'📧 Weekly report sent to {admin_email}.', 'success')
+    else:
+        flash('Email not sent — configure SendGrid in Settings.', 'error')
+    return redirect(url_for('settings'))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

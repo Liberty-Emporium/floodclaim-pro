@@ -1,6 +1,60 @@
 {% extends 'base.html' %}
 {% block title %}Dashboard — FloodClaim Pro{% endblock %}
 {% block page_title %}📊 Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+  .filter-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+    display: flex; flex-wrap: wrap; gap: .75rem; align-items: flex-end;
+  }
+  .filter-bar .fg { display: flex; flex-direction: column; gap: .3rem; min-width: 140px; }
+  .filter-bar label { font-size: .65rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--t-secondary); }
+  .filter-bar .fc {
+    background: var(--elevated); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--t-primary);
+    font-size: .82rem; padding: .45rem .75rem; outline: none;
+    transition: border-color .2s;
+  }
+  .filter-bar .fc:focus { border-color: var(--teal); }
+  .search-wrap { flex: 1; min-width: 200px; }
+  .search-input-wrap { position: relative; }
+  .search-input-wrap .si {
+    width: 100%; padding-left: 2.2rem;
+  }
+  .search-icon { position: absolute; left: .7rem; top: 50%; transform: translateY(-50%); color: var(--t-muted); font-size: .9rem; pointer-events: none; }
+
+  .bulk-bar {
+    background: rgba(6,214,199,.07);
+    border: 1px solid rgba(6,214,199,.2);
+    border-radius: 10px;
+    padding: .65rem 1rem;
+    margin-bottom: 1rem;
+    display: none; align-items: center; gap: .75rem; flex-wrap: wrap;
+  }
+  .bulk-bar.visible { display: flex; }
+  .bulk-count { font-size: .82rem; font-weight: 700; color: var(--teal); }
+
+  .cb-col { width: 36px; }
+  input[type=checkbox] { accent-color: var(--teal); width: 15px; height: 15px; cursor: pointer; }
+
+  .active-filters {
+    display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .75rem;
+  }
+  .filter-chip {
+    display: inline-flex; align-items: center; gap: .35rem;
+    background: rgba(6,214,199,.1); border: 1px solid rgba(6,214,199,.2);
+    color: var(--teal); border-radius: 999px;
+    padding: .2rem .75rem; font-size: .72rem; font-weight: 700;
+  }
+  .filter-chip a { color: var(--teal); text-decoration: none; margin-left: .2rem; }
+</style>
+{% endblock %}
+
 {% block content %}
 
 <div class="stats-grid">
@@ -30,15 +84,123 @@
   </div>
 </div>
 
+<!-- Filter Bar -->
+<form method="GET" action="{{ url_for('dashboard') }}" id="filter-form">
+<div class="filter-bar">
+  <div class="search-wrap">
+    <label>Search</label>
+    <div class="search-input-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="fc si" type="text" name="q" value="{{ q }}" placeholder="Name, claim #, address…">
+    </div>
+  </div>
+  <div class="fg">
+    <label>Status</label>
+    <select class="fc" name="status" onchange="this.form.submit()">
+      <option value="">All Statuses</option>
+      {% for s in ['New','In Progress','Submitted','Closed'] %}
+      <option value="{{ s }}" {% if f_status==s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% if session.role == 'admin' %}
+  <div class="fg">
+    <label>Adjuster</label>
+    <select class="fc" name="adjuster_id" onchange="this.form.submit()">
+      <option value="">All Adjusters</option>
+      {% for a in adjusters %}
+      <option value="{{ a.id }}" {% if f_adjuster==a.id|string %}selected{% endif %}>{{ a.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="fg">
+    <label>Priority</label>
+    <select class="fc" name="priority" onchange="this.form.submit()">
+      <option value="">All Priorities</option>
+      {% for p in ['Normal','High','Urgent'] %}
+      <option value="{{ p }}" {% if f_priority==p %}selected{% endif %}>{{ p }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="fg">
+    <label>Flood Date From</label>
+    <input class="fc" type="date" name="date_from" value="{{ f_date_from }}">
+  </div>
+  <div class="fg">
+    <label>To</label>
+    <input class="fc" type="date" name="date_to" value="{{ f_date_to }}">
+  </div>
+  <div class="fg" style="min-width:auto">
+    <label>&nbsp;</label>
+    <button type="submit" class="btn btn-primary btn-sm">🔍 Filter</button>
+  </div>
+  {% if q or f_status or f_adjuster or f_priority or f_date_from or f_date_to %}
+  <div class="fg" style="min-width:auto">
+    <label>&nbsp;</label>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-sm">✕ Clear</a>
+  </div>
+  {% endif %}
+</div>
+</form>
+
+<!-- Active filter chips -->
+{% if q or f_status or f_adjuster or f_priority or f_date_from or f_date_to %}
+<div class="active-filters">
+  {% if q %}<span class="filter-chip">🔍 "{{ q }}" <a href="{{ url_for('dashboard', status=f_status, adjuster_id=f_adjuster, priority=f_priority, date_from=f_date_from, date_to=f_date_to) }}">✕</a></span>{% endif %}
+  {% if f_status %}<span class="filter-chip">📌 {{ f_status }}</span>{% endif %}
+  {% if f_priority %}<span class="filter-chip">⚡ {{ f_priority }}</span>{% endif %}
+  {% if f_date_from %}<span class="filter-chip">📅 From {{ f_date_from }}</span>{% endif %}
+  {% if f_date_to %}<span class="filter-chip">📅 To {{ f_date_to }}</span>{% endif %}
+  <span style="font-size:.78rem;color:var(--t-muted);align-self:center">{{ claims|length }} result{{ 's' if claims|length != 1 }}</span>
+</div>
+{% endif %}
+
+<!-- Bulk action form wraps the table -->
+<form method="POST" action="{{ url_for('bulk_action') }}" id="bulk-form">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
 <div class="card">
   <div class="card-header">
     <div class="card-title">All Claims</div>
-    <a href="{{ url_for('new_claim') }}" class="btn btn-primary btn-sm">➕ New Claim</a>
+    <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+      <a href="{{ url_for('pipeline') }}" class="btn btn-ghost btn-sm">🗂 Pipeline View</a>
+      <a href="{{ url_for('new_claim') }}" class="btn btn-primary btn-sm">➕ New Claim</a>
+    </div>
   </div>
+
+  <!-- Bulk action bar -->
+  <div class="bulk-bar" id="bulk-bar">
+    <span class="bulk-count" id="bulk-count">0 selected</span>
+    <select name="bulk_action" class="fc" style="font-size:.78rem;padding:.35rem .65rem;border-radius:8px;min-width:160px">
+      <option value="">— Bulk Action —</option>
+      <option value="set_new">Set Status: New</option>
+      <option value="set_in_progress">Set Status: In Progress</option>
+      <option value="set_submitted">Set Status: Submitted</option>
+      <option value="set_closed">Set Status: Closed</option>
+      {% if session.role == 'admin' %}
+      <option value="assign">Assign Adjuster</option>
+      {% endif %}
+      <option value="delete">🗑 Delete Selected</option>
+    </select>
+    {% if session.role == 'admin' %}
+    <select name="assign_adjuster" class="fc" style="font-size:.78rem;padding:.35rem .65rem;border-radius:8px;min-width:140px">
+      <option value="">— Adjuster —</option>
+      {% for a in adjusters %}
+      <option value="{{ a.id }}">{{ a.name }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+    <button type="submit" class="btn btn-primary btn-sm"
+            onclick="return confirmBulk()">Apply</button>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="clearSelection()">Clear</button>
+  </div>
+
   {% if claims %}
   <div class="table-wrap"><table class="table">
     <thead>
       <tr>
+        <th class="cb-col"><input type="checkbox" id="select-all" onclick="toggleAll(this)"></th>
         <th>Claim #</th>
         <th>Client</th>
         <th>Address</th>
@@ -53,12 +215,16 @@
     <tbody>
     {% for c in claims %}
     <tr>
-      <td><span style="font-family:monospace;font-size:.8rem;font-weight:700;color:#1e40af">{{ c.claim_number }}</span></td>
-      <td><div style="font-weight:600">{{ c.client_name }}</div><div style="font-size:.75rem;color:#94a3b8">{{ c.client_phone }}</div></td>
-      <td style="font-size:.85rem">{{ c.property_address }}</td>
+      <td class="cb-col"><input type="checkbox" name="claim_ids" value="{{ c.id }}" class="row-cb" onchange="updateBulkBar()"></td>
+      <td><span style="font-family:monospace;font-size:.8rem;font-weight:700;color:var(--teal)">{{ c.claim_number }}</span></td>
+      <td>
+        <div style="font-weight:600">{{ c.client_name }}</div>
+        <div style="font-size:.75rem;color:var(--t-secondary)">{{ c.client_phone }}</div>
+      </td>
+      <td style="font-size:.85rem">{{ c.property_address[:35] }}{% if c.property_address|length > 35 %}…{% endif %}</td>
       <td style="font-size:.85rem">{{ c.adjuster_name or '—' }}</td>
       <td style="font-size:.85rem">{{ c.flood_date }}</td>
-      <td style="font-weight:700;color:#10b981">${{ "{:,.2f}".format(c.total_estimate) }}</td>
+      <td style="font-weight:700;color:var(--green)">${{ "{:,.0f}".format(c.total_estimate) }}</td>
       <td>
         {% if c.status == 'New' %}<span class="badge badge-new">New</span>
         {% elif c.status == 'In Progress' %}<span class="badge badge-progress">In Progress</span>
@@ -66,14 +232,12 @@
         {% elif c.status == 'Closed' %}<span class="badge badge-closed">Closed</span>
         {% else %}<span class="badge">{{ c.status }}</span>{% endif %}
       </td>
-      <td>
-        <a href="{{ url_for('claim_detail', claim_id=c.id) }}" class="btn btn-ghost btn-sm">View →</a>
-      </td>
+      <td><a href="{{ url_for('claim_detail', claim_id=c.id) }}" class="btn btn-ghost btn-sm">View →</a></td>
       <td>
         <form method="POST" action="{{ url_for('delete_claim', claim_id=c.id) }}"
-              onsubmit="return confirm('Delete claim {{ c.claim_number }} ({{ c.client_name }})? This cannot be undone.')">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn btn-danger btn-sm" title="Delete claim">🗑</button>
+              onsubmit="return confirm('Delete {{ c.claim_number }} ({{ c.client_name }})? Cannot be undone.')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-danger btn-sm">🗑</button>
         </form>
       </td>
     </tr>
@@ -81,11 +245,53 @@
     </tbody>
   </table></div>
   {% else %}
-  <div style="text-align:center;padding:3rem;color:#94a3b8">
+  <div style="text-align:center;padding:3rem;color:var(--t-muted)">
     <div style="font-size:3rem;margin-bottom:1rem">📋</div>
-    <div style="font-weight:600;margin-bottom:.5rem">No claims yet</div>
+    <div style="font-weight:600;margin-bottom:.5rem">
+      {% if q or f_status or f_priority %}No claims match your filters{% else %}No claims yet{% endif %}
+    </div>
+    {% if q or f_status or f_priority %}
+    <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-sm">Clear filters</a>
+    {% else %}
     <a href="{{ url_for('new_claim') }}" class="btn btn-primary">Create Your First Claim</a>
+    {% endif %}
   </div>
   {% endif %}
 </div>
+
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleAll(master) {
+  document.querySelectorAll('.row-cb').forEach(cb => cb.checked = master.checked);
+  updateBulkBar();
+}
+function updateBulkBar() {
+  const checked = document.querySelectorAll('.row-cb:checked').length;
+  const bar = document.getElementById('bulk-bar');
+  const cnt = document.getElementById('bulk-count');
+  bar.classList.toggle('visible', checked > 0);
+  cnt.textContent = checked + ' selected';
+  document.getElementById('select-all').indeterminate =
+    checked > 0 && checked < document.querySelectorAll('.row-cb').length;
+}
+function clearSelection() {
+  document.querySelectorAll('.row-cb, #select-all').forEach(cb => cb.checked = false);
+  updateBulkBar();
+}
+function confirmBulk() {
+  const action = document.querySelector('select[name="bulk_action"]').value;
+  const count  = document.querySelectorAll('.row-cb:checked').length;
+  if (!action) { alert('Please choose a bulk action.'); return false; }
+  if (!count)  { alert('No claims selected.'); return false; }
+  if (action === 'delete') return confirm(`Delete ${count} claim(s)? This cannot be undone.`);
+  return true;
+}
+// Auto-submit on date change
+document.querySelectorAll('input[name="date_from"], input[name="date_to"]').forEach(el => {
+  el.addEventListener('change', () => document.getElementById('filter-form').submit());
+});
+</script>
 {% endblock %}
