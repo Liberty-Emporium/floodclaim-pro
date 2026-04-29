@@ -218,7 +218,7 @@ function onDrop(e) {
   // API call
   fetch('/pipeline/move', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': (document.querySelector('meta[name="csrf"]')||{}).content||'' },
     body: JSON.stringify({ claim_id: parseInt(claimId), status: newStatus })
   })
   .then(r => r.json())

@@ -173,8 +173,12 @@ td{padding:.6rem .75rem;border-bottom:1px solid #f1f5f9}
   <button onclick="genPortal()" style="background:#8b5cf6;color:#fff;border:none;padding:.7rem 1.2rem;border-radius:8px;font-size:.85rem;font-weight:700;cursor:pointer;font-family:inherit">🔗 Client Portal</button>
 </div>
 <script>
+function getCsrfReport() {
+  const m = document.querySelector('meta[name="csrf"]');
+  return m ? m.content : '';
+}
 function femaLookup() {
-  fetch('/claims/{{ claim.id }}/fema-lookup', {method:'POST', credentials: 'include'})
+  fetch('/claims/{{ claim.id }}/fema-lookup', {method:'POST', credentials:'include', headers:{'X-CSRF-Token':getCsrfReport()}})
     .then(r=>r.json()).then(d=>{
       if(d.ok) alert('FEMA Flood Zone: ' + d.flood_zone + '\nMap #: ' + (d.fema_map_number||'N/A') + '\nPage will reload.');
       else alert('Lookup failed: ' + (d.error||'unknown'));
@@ -182,7 +186,7 @@ function femaLookup() {
     });
 }
 function genPortal() {
-  fetch('/claims/{{ claim.id }}/portal/generate', {method:'POST', credentials: 'include'})
+  fetch('/claims/{{ claim.id }}/portal/generate', {method:'POST', credentials:'include', headers:{'X-CSRF-Token':getCsrfReport()}})
     .then(r=>r.json()).then(d=>{
       if(d.ok) { prompt('Client portal link (copy and share):', d.portal_url); }
       else alert('Error: ' + (d.error||'unknown'));

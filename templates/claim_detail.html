@@ -443,15 +443,38 @@ function toggleRoom(id) {
   el.style.display = el.style.display === 'none' ? '' : 'none';
 }
 
+// Read CSRF token — hidden input first, meta tag fallback
+function getCsrf() {
+  const inp  = document.querySelector('input[name="csrf_token"]');
+  if (inp) return inp.value;
+  const meta = document.querySelector('meta[name="csrf"]');
+  return meta ? meta.content : '';
+}
+
 async function deleteItem(id, btn) {
   if (!confirm('Delete this line item?')) return;
-  const r = await fetch('/items/' + id + '/delete', {method:'POST', credentials: 'include'});
-  if (r.ok) { btn.closest('tr').remove(); location.reload(); }
+  const r = await fetch('/items/' + id + '/delete', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': getCsrf() }
+  });
+  if (r.ok) {
+    const row = btn.closest('tr');
+    if (row) row.remove();
+    // Update subtotal display without full reload
+    location.reload();
+  } else {
+    alert('Delete failed (status ' + r.status + '). Please refresh and try again.');
+  }
 }
 
 async function deletePhoto(id) {
   if (!confirm('Delete this photo? This cannot be undone.')) return;
-  const r = await fetch('/photos/' + id + '/delete', {method:'POST', credentials: 'include'});
+  const r = await fetch('/photos/' + id + '/delete', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': getCsrf() }
+  });
   const data = await r.json();
   if (data.ok) {
     const card = document.getElementById('photo-' + id);
@@ -472,7 +495,7 @@ async function reanalyzePhoto(photoId, btn) {
   btn.disabled = true;
   descEl.innerHTML = '<span class="ai-analyzing-tag">⏳ Analyzing...</span>';
   try {
-    const r = await fetch('/photos/' + photoId + '/analyze', {method: 'POST', credentials: 'include'});
+    const r = await fetch('/photos/' + photoId + '/analyze', {method: 'POST', credentials: 'include', headers:{'X-CSRF-Token':getCsrf()}});
     const data = await r.json();
     if (data.description) {
       descEl.textContent = data.description;
@@ -536,7 +559,7 @@ function editAiDesc(photoId) {
   };
   saveBtn.onclick = function() {
     const newText = ta.value.trim();
-    fetch('/photos/' + photoId + '/ai-description', {
+    fetch('/photos/' + photoId + '/ai-description', { headers:{'X-CSRF-Token':getCsrf()},
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       credentials: 'include',
@@ -636,7 +659,7 @@ function _estimateShowResult(d) {
   document.getElementById('estimateContent').innerHTML = html;
   var newTotal = extractTotal(estimate);
   if (newTotal && newTotal > 0) {
-    fetch('/claims/{{ claim.id }}/update-estimate', {
+    fetch('/claims/{{ claim.id }}/update-estimate', { headers:{'X-CSRF-Token':getCsrf()},
       method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
       body: JSON.stringify({total_estimate: newTotal})
     }).then(r=>r.json()).then(upd=>{
@@ -653,7 +676,7 @@ function runAIEstimate() {
   _estimateSeconds = 0;
   _estimateLoading('Starting AI estimate job...');
 
-  fetch('/claims/{{ claim.id }}/ai-estimate', {
+  fetch('/claims/{{ claim.id }}/ai-estimate', { headers:{'X-CSRF-Token':getCsrf()},
     method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include'
   })
   .then(r => {
