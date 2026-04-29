@@ -160,7 +160,7 @@
       </select>
       <button type="submit" class="btn btn-ghost btn-sm">Update</button>
     </form>
-    <a href="{{ url_for('willie') }}?claim_id={{ claim.id }}" class="btn btn-ghost btn-sm">🌊 Ask Willie</a>
+    <a href="{{ url_for('willie') }}?claim_id={{ claim.id }}" class="btn btn-ghost btn-sm">🌊 Ask Aquila</a>
     <a href="{{ url_for('submit_package_page', claim_id=claim.id) }}" class="btn btn-primary btn-sm">📤 Submit to Carrier</a>
     <a href="{{ url_for('report', claim_id=claim.id) }}" class="btn btn-cyan btn-sm" target="_blank">📄 Report</a>
     <a href="{{ url_for('compliance', claim_id=claim.id) }}" class="btn btn-amber btn-sm">✅ NFIP Check</a>

@@ -180,10 +180,10 @@
     {% endif %}
   </div>
 
-  <!-- Willie Integration -->
+  <!-- Aquila Integration -->
   <div class="card">
     <div class="card-header">
-      <div class="card-title">🤖 Willie Integration</div>
+      <div class="card-title">🤖 Aquila Integration</div>
       {% set willie_key = current_willie_key or '' %}
       {% if willie_key %}
         <span class="key-status key-set">✅ Connected</span>
@@ -193,27 +193,27 @@
     </div>
 
     <div class="info-box">
-      <strong>Willie</strong> is your AI assistant in the chat bubble — he can add rooms, line items,
-      look up claims, and more. Paste his API key (from <strong>AI Agent Widget → Willie → Edit</strong>)
+      <strong>Aquila</strong> is your AI assistant in the chat bubble — he can add rooms, line items,
+      look up claims, and more. Paste his API key (from <strong>AI Agent Widget → Aquila → Edit</strong>)
       then click <strong>Sync Actions</strong> to wire everything up.
     </div>
 
     <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-group">
-        <label>Willie Widget API Key</label>
+        <label>Aquila Widget API Key</label>
         <input class="form-control" type="password" name="willie_agent_key"
-               placeholder="Paste Willie's API key from the widget admin..."
+               placeholder="Paste Aquila's API key from the widget admin..."
                autocomplete="new-password"
                value="{{ willie_key[:8] + '...' if willie_key else '' }}"/>
         <div style="font-size:.78rem;color:var(--gray-400);margin-top:.35rem;">
-          Find it: AI Agent Widget app → Willie → Edit → copy the API Key field.
+          Find it: AI Agent Widget app → Aquila → Edit → copy the API Key field.
         </div>
       </div>
       <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;">
-        <button type="submit" class="btn btn-primary btn-sm">💾 Save Willie Key</button>
+        <button type="submit" class="btn btn-primary btn-sm">💾 Save Aquila Key</button>
         {% if willie_key %}
-        <button type="button" class="btn btn-cyan btn-sm" onclick="syncWillieActions()">⚡ Sync Actions to Willie</button>
+        <button type="button" class="btn btn-cyan btn-sm" onclick="syncWillieActions()">⚡ Sync Actions to Aquila</button>
         {% endif %}
       </div>
     </form>
@@ -221,7 +221,7 @@
     {% if willie_key %}
     <div id="willie-sync-status" style="margin-top:1rem;display:none;"></div>
     <div style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem;font-size:.82rem;color:var(--t-secondary);">
-      <strong>Willie's actions (28 total):</strong> get_dashboard, list_claims, lookup_claim, get_claim,
+      <strong>Aquila's actions (28 total):</strong> get_dashboard, list_claims, lookup_claim, get_claim,
       create_claim, update_claim_fields, update_claim_status, add_room, list_rooms, add_line_item,
       delete_room, delete_line_item, get_report, generate_estimate, analyze_photos,
       schedule_inspection, check_compliance, fema_flood_zone_lookup, notify_client,
@@ -229,13 +229,13 @@
       delete_team_member, get_settings
     </div>
     <div style="margin-top:1rem;padding:.85rem 1rem;background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.2);border-radius:10px;font-size:.82rem;color:var(--red)">
-      <strong>⚠️ Willie calling himself the wrong name?</strong>
+      <strong>⚠️ Aquila calling herself the wrong name?</strong>
       Click below after deploying to fix his identity.
       <form method="POST" action="{{ url_for('willie_fix_identity') }}" style="margin-top:.6rem">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-danger btn-sm"
-                onclick="return confirm('Fix Willie\'s name and identity in the widget?')">
-          🔧 Fix Willie\'s Name
+                onclick="return confirm('Fix Aquila\'s name and identity in the widget?')">
+          🔧 Fix Aquila\'s Name
         </button>
       </form>
     </div>
@@ -336,7 +336,7 @@ function syncWillieActions() {
   btn.disabled = true;
   btn.textContent = '⏳ Syncing...';
   stat.style.display = 'block';
-  stat.innerHTML = '<span style="color:#64748b">Pushing actions to Willie...</span>';
+  stat.innerHTML = '<span style="color:#64748b">Pushing actions to Aquila...</span>';
   fetch('/willie/api/actions/sync', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -345,7 +345,7 @@ function syncWillieActions() {
   .then(r => r.json())
   .then(d => {
     btn.disabled = false;
-    btn.textContent = '⚡ Sync Actions to Willie';
+    btn.textContent = '⚡ Sync Actions to Aquila';
     if (d.ok) {
       stat.innerHTML = '<span style="color:#065f46">✅ ' + d.message + '</span>';
     } else if (d.pushed && d.pushed.length > 0) {
@@ -356,7 +356,7 @@ function syncWillieActions() {
   })
   .catch(e => {
     btn.disabled = false;
-    btn.textContent = '⚡ Sync Actions to Willie';
+    btn.textContent = '⚡ Sync Actions to Aquila';
     stat.innerHTML = '<span style="color:#ef4444">❌ Network error: ' + e.message + '</span>';
   });
 }

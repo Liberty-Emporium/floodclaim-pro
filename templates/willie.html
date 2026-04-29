@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
-{% block title %}Willie — FloodClaim Pro{% endblock %}
-{% block page_title %}🌊 Chat with Willie{% endblock %}
+{% block title %}Aquila — FloodClaim Pro{% endblock %}
+{% block page_title %}🌊 Chat with Aquila{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -157,7 +157,7 @@
         </div>
         {% endfor %}
       {% else %}
-        <div class="sidebar-empty">No conversations yet.<br>Start chatting with Willie!</div>
+        <div class="sidebar-empty">No conversations yet.<br>Start chatting with Aquila!</div>
       {% endif %}
     </div>
   </aside>
@@ -167,7 +167,7 @@
     <div class="chat-messages" id="chat-messages">
       <div class="willie-welcome" id="welcome">
         <div class="welcome-wave">🌊</div>
-        <div class="welcome-title">Hey, I'm Willie</div>
+        <div class="welcome-title">Hey, I'm Aquila</div>
         <div class="welcome-sub">Your flood damage expert. Ask me anything about claims, damage assessment, insurance, or anything inside FloodClaim Pro.</div>
         <div class="quick-prompts">
           <button class="qp" onclick="quickSend('Show me a dashboard summary — how many claims do I have and what is my pipeline value?')">📊 Dashboard summary</button>
@@ -185,7 +185,7 @@
     <div class="chat-input-area">
       <div class="chat-input-row">
         <textarea class="chat-textarea" id="chat-input" rows="1"
-          placeholder="Ask Willie anything..."
+          placeholder="Ask Aquila anything..."
           onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
         <button class="send-btn" id="send-btn" onclick="sendMessage()">➤</button>
       </div>
@@ -238,7 +238,7 @@ function addMessage(role, content, typing=false, iso=null) {
   div.className = `chat-msg ${role === 'user' ? 'user' : 'willie'}`;
   if (typing) div.id = 'typing-msg';
   const av   = role === 'user' ? '👤' : '🌊';
-  const name = role === 'user' ? '{{ session.name or session.email }}' : 'Willie';
+  const name = role === 'user' ? '{{ session.name or session.email }}' : 'Aquila';
   div.innerHTML = typing
     ? `<div class="msg-av">${av}</div>
        <div class="msg-body">
@@ -293,7 +293,7 @@ async function deleteConversation(e, convId) {
   if (currentConvId === convId) { currentConvId = null; chatHistory = []; clearMessages(); }
   if (!document.querySelector('.conv-item')) {
     document.getElementById('conv-list').innerHTML =
-      '<div class="sidebar-empty">No conversations yet.<br>Start chatting with Willie!</div>';
+      '<div class="sidebar-empty">No conversations yet.<br>Start chatting with Aquila!</div>';
   }
 }
 
@@ -301,7 +301,7 @@ function clearMessages() {
   document.getElementById('chat-messages').innerHTML = `
     <div class="willie-welcome" id="welcome">
       <div class="welcome-wave">🌊</div>
-      <div class="welcome-title">Hey, I'm Willie</div>
+      <div class="welcome-title">Hey, I'm Aquila</div>
       <div class="welcome-sub">Your flood damage expert. Ask me anything.</div>
       <div class="quick-prompts">
         <button class="qp" onclick="quickSend('What should I do first after a flood?')">🚨 First steps after a flood</button>
@@ -378,7 +378,7 @@ async function sendMessage() {
     }
   } catch(e) {
     typing.remove();
-    addMessage('willie', '⚠️ Could not reach Willie. Check your connection.');
+    addMessage('willie', '⚠️ Could not reach Aquila. Check your connection.');
   }
 
   isThinking = false;

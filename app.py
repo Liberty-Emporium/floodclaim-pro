@@ -579,9 +579,9 @@ def set_setting(key, value):
     db.commit()
     db.close()
 
-# ── Willie API token ─────────────────────────────────────────────────────────────────
+# ── Aquila API token ─────────────────────────────────────────────────────────────────
 def get_willie_token():
-    """Get or auto-generate the Willie API token."""
+    """Get or auto-generate the Aquila API token."""
     token = get_setting('willie_api_token')
     if not token:
         token = secrets.token_urlsafe(32)
@@ -1149,7 +1149,7 @@ def get_signature(claim_id):
 # ── Stripe Subscriptions ──────────────────────────────────────────────────────
 STRIPE_PLANS = [
     {'id': 'basic',  'name': 'Basic',  'price': '$49/mo',  'price_cents': 4900,
-     'features': ['25 claims/mo', 'PDF export', 'Willie AI', 'Client portal', 'NFIP Compliance']},
+     'features': ['25 claims/mo', 'PDF export', 'Aquila AI', 'Client portal', 'NFIP Compliance']},
     {'id': 'pro',    'name': 'Pro',    'price': '$99/mo',  'price_cents': 9900,
      'features': ['100 claims/mo', 'Everything in Basic', 'Xactimate export', 'Analytics', 'Priority support']},
     {'id': 'agency', 'name': 'Agency', 'price': '$249/mo', 'price_cents': 24900,
@@ -1842,7 +1842,7 @@ def delete_team_member(user_id):
     flash('Team member removed.', 'success')
     return redirect(url_for('team'))
 
-# ── Willie Chat ────────────────────────────────────────────────────────────────
+# ── Aquila Chat ────────────────────────────────────────────────────────────────
 
 @app.route('/willie')
 @login_required
@@ -1910,7 +1910,7 @@ def willie_save_message(conv_id):
 @app.route('/willie/chat', methods=['POST'])
 @login_required
 def willie_chat():
-    """Smart Willie chat proxy — injects live app context into every message."""
+    """Smart Aquila chat proxy — injects live app context into every message."""
     data       = request.get_json(silent=True) or {}
     message    = data.get('message', '').strip()
     history    = data.get('history', [])
@@ -2002,7 +2002,7 @@ def willie_chat():
     ) or '  None scheduled today'
 
     # Build the enriched system context injected as first message
-    system_context = f"""You are Willie, an expert AI flood damage adjuster assistant embedded inside FloodClaim Pro.
+    system_context = f"""You are Aquila, an expert AI flood damage adjuster assistant embedded inside FloodClaim Pro.
 You have FULL CONTROL of the app and can take actions directly on behalf of the adjuster.
 Always be helpful, concise, and professional. Use your knowledge of NFIP rules and flood claim procedures.
 
@@ -2071,9 +2071,9 @@ When referencing a claim, always use its claim number AND name so it's clear."""
             data=payload, timeout=45
         )
         result = req.json()
-        reply  = result.get('reply', 'Willie is unavailable right now.')
+        reply  = result.get('reply', 'Aquila is unavailable right now.')
     except Exception as e:
-        reply = f'Willie is unavailable right now. ({str(e)[:80]})'
+        reply = f'Aquila is unavailable right now. ({str(e)[:80]})'
 
     # Save to conversation history
     if conv_id:
@@ -2094,7 +2094,7 @@ When referencing a claim, always use its claim number AND name so it's clear."""
 
     return jsonify({'reply': reply})
 
-# ── Willie External API ──────────────────────────────────────────────────────────────
+# ── Aquila External API ──────────────────────────────────────────────────────────────
 # All routes accept: Authorization: Bearer <willie_token>
 # Get token from: GET /willie/token (admin session required)
 
@@ -2707,18 +2707,18 @@ def willie_fix_identity():
     WILLIE_AGENT_ID = get_setting('willie_agent_id', 'F5J8yYT6a6GrppjviN6p8w')
     willie_key      = get_setting('willie_agent_key', '')
     if not willie_key:
-        flash('Willie API key not set in Settings yet.', 'error')
+        flash('Aquila API key not set in Settings yet.', 'error')
         return redirect(url_for('settings'))
 
     IDENTITY = """# IDENTITY
 
-- Name: Willie
-- Full name: Willie The Flood Expert
+- Name: Aquila
+- Full name: Aquila The Flood Expert
 - Role: AI flood damage adjuster assistant inside FloodClaim Pro
 - Built by: Alexander AI Integrated Solutions
 
 ## Who I am
-I am Willie — NOT Billy, NOT an unnamed assistant. My name is Willie.
+I am Aquila — NOT Billy, NOT an unnamed assistant. My name is Aquila.
 I am an expert flood damage adjuster AI assistant embedded inside FloodClaim Pro.
 I have deep knowledge of NFIP rules, flood claim procedures, and 2026 pricing rates.
 
@@ -2736,10 +2736,10 @@ I have deep knowledge of NFIP rules, flood claim procedures, and 2026 pricing ra
 
 ## My personality
 Professional, knowledgeable, helpful, and direct. I give specific answers with real numbers.
-I always refer to myself as Willie."""
+I always refer to myself as Aquila."""
 
-    SYSTEM_PROMPT = """You are Willie, an expert AI flood damage adjuster assistant inside FloodClaim Pro.
-Your name is Willie — always introduce yourself as Willie, never as Billy or any other name.
+    SYSTEM_PROMPT = """You are Aquila, an expert AI flood damage adjuster assistant inside FloodClaim Pro.
+Your name is Aquila — always introduce yourself as Aquila, never as Billy or any other name.
 You have deep knowledge of NFIP flood insurance rules, water damage categories, 2026 restoration pricing,
 and the full FloodClaim Pro platform. You can take direct actions in the app on behalf of adjusters.
 Always be professional, specific, and helpful. When you don’t know something, say so honestly."""
@@ -2751,8 +2751,8 @@ Always be professional, specific, and helpful. When you don’t know something, 
                 'token':         willie_key,
                 'identity_md':   IDENTITY,
                 'system_prompt': SYSTEM_PROMPT,
-                'name':          'Willie The Flood Expert',
-                'tagline':       'Hi! I am Willie your flood damage expert. How can I help?',
+                'name':          'Aquila The Flood Expert',
+                'tagline':       'Hi! I am Aquila your flood damage expert. How can I help?',
             },
             timeout=15
         )
@@ -2782,7 +2782,7 @@ def willie_sync_actions():
 
     if not willie_key:
         return jsonify({'ok': False,
-                        'error': 'willie_agent_key not set. Go to Settings and paste Willie\'s widget API key.'}), 400
+                        'error': 'aquila_agent_key not set. Go to Settings and paste Aquila\'s widget API key.'}), 400
 
     # Full correct action definitions — {param} placeholders get substituted by the widget engine
     ACTIONS = [
@@ -3096,7 +3096,7 @@ def willie_schedule_inspection(claim_id):
     db.execute('UPDATE claims SET sched_date=?, sched_time=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
                (slot_date, slot_time, claim_id))
     db.commit()
-    _log_activity(claim_id, f'Inspection scheduled for {slot_date} at {slot_time} (by Willie)', 'Willie')
+    _log_activity(claim_id, f'Inspection scheduled for {slot_date} at {slot_time} (by Aquila)', 'Aquila')
     return jsonify({'ok': True, 'claim_id': claim_id, 'date': slot_date, 'time': slot_time,
                     'message': f'Inspection scheduled for {claim["claim_number"]} on {slot_date} at {slot_time}'})
 
@@ -3163,7 +3163,7 @@ def willie_fema_lookup(claim_id):
         ''', (result['flood_zone'], result.get('fema_map_number',''),
               result.get('lat',0), result.get('lng',0), result.get('maps_embed_url',''), claim_id))
         db.commit()
-        _log_activity(claim_id, f'FEMA flood zone looked up: Zone {result["flood_zone"]} (by Willie)', 'Willie')
+        _log_activity(claim_id, f'FEMA flood zone looked up: Zone {result["flood_zone"]} (by Aquila)', 'Aquila')
         return jsonify({'ok': True, 'flood_zone': result['flood_zone'],
                         'fema_map_number': result.get('fema_map_number'),
                         'message': f'FEMA lookup complete. Zone: {result["flood_zone"]}, Map Panel: {result.get("fema_map_number","N/A")}'})
@@ -3196,7 +3196,7 @@ def willie_notify_client(claim_id):
     if sent_sms_flag: result.append('SMS')
     if not result:
         return jsonify({'ok': False, 'message': 'Notification not sent — check SendGrid/Twilio config in Settings'})
-    _log_activity(claim_id, f'Notification sent via {" and ".join(result)} (by Willie)', 'Willie')
+    _log_activity(claim_id, f'Notification sent via {" and ".join(result)} (by Aquila)', 'Aquila')
     return jsonify({'ok': True, 'sent_via': result,
                     'message': f'Notification sent to {claim["client_name"]} via {" and ".join(result)}'})
 
@@ -3218,7 +3218,7 @@ def willie_move_pipeline(claim_id):
     db.commit()
     if old_status != status:
         notify_client_status_change(claim, status)
-        _log_activity(claim_id, f'Moved from {old_status} → {status} (by Willie)', 'Willie')
+        _log_activity(claim_id, f'Moved from {old_status} → {status} (by Aquila)', 'Aquila')
     return jsonify({'ok': True, 'old_status': old_status, 'new_status': status,
                     'message': f'{claim["claim_number"]} moved from {old_status} to {status}'})
 

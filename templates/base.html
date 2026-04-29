@@ -859,7 +859,7 @@
   <div class="help-body" id="help-body"></div>
   <div class="help-footer">
     💬 Need more help?
-    <a href="{{ url_for('willie') }}" style="color:var(--teal);font-weight:700;text-decoration:none">Ask Willie →</a>
+    <a href="{{ url_for('willie') }}" style="color:var(--teal);font-weight:700;text-decoration:none">Ask Aquila →</a>
   </div>
 </aside>
 
@@ -912,12 +912,12 @@ const HELP_CONTENT = {
         <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>✅ NFIP Check</strong><p>Shows your compliance score (0–100%). Run this before submitting — it tells you exactly what's missing.</p></div></div>
         <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>📱 QR Upload</strong><p>Get a QR code the client or contractor can scan to upload photos from their phone. No login needed.</p></div></div>
         <div class="help-step"><div class="help-step-num">5</div><div class="help-step-body"><strong>⊞ Duplicate</strong><p>Copies this claim with all rooms and line items. Useful for multiple properties in the same neighborhood.</p></div></div>
-        <div class="help-step"><div class="help-step-num">6</div><div class="help-step-body"><strong>🌊 Ask Willie</strong><p>Opens Willie AI with full context about this specific claim. Willie can add rooms, look up FEMA zones, check compliance, and more.</p></div></div>
+        <div class="help-step"><div class="help-step-num">6</div><div class="help-step-body"><strong>🌊 Ask Aquila</strong><p>Opens Aquila AI with full context about this specific claim. Aquila can add rooms, look up FEMA zones, check compliance, and more.</p></div></div>
       </div>
       <div class="help-section">
         <div class="help-section-title">Building the scope</div>
         <div class="help-step"><div class="help-step-num">7</div><div class="help-step-body"><strong>Add rooms</strong><p>Click <em>+ Add Room</em> and name each damaged area (Living Room, Kitchen, Master Bath, etc.). Keep room names consistent with what you'd call them in Xactimate.</p></div></div>
-        <div class="help-step"><div class="help-step-num">8</div><div class="help-step-body"><strong>Add line items</strong><p>Under each room, add damage items: description, quantity, unit (sf/lf/ea), and unit cost. The total auto-calculates. Use 2026 NFIP rates — ask Willie if unsure.</p></div></div>
+        <div class="help-step"><div class="help-step-num">8</div><div class="help-step-body"><strong>Add line items</strong><p>Under each room, add damage items: description, quantity, unit (sf/lf/ea), and unit cost. The total auto-calculates. Use 2026 NFIP rates — ask Aquila if unsure.</p></div></div>
         <div class="help-step"><div class="help-step-num">9</div><div class="help-step-body"><strong>🤖 AI Estimate</strong><p>Click this button to let the AI read your photos and rooms and generate a complete scope-of-work estimate. Review it, edit anything that's wrong, then click Apply.</p></div></div>
       </div>
       <div class="help-section">
@@ -989,7 +989,7 @@ const HELP_CONTENT = {
       </div>
       <div class="help-section">
         <div class="help-section-title">Common missing items</div>
-        <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>FEMA flood zone</strong><p>Click the FEMA Lookup button on the Report page or ask Willie to look it up. It auto-fills on the claim.</p></div></div>
+        <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>FEMA flood zone</strong><p>Click the FEMA Lookup button on the Report page or ask Aquila to look it up. It auto-fills on the claim.</p></div></div>
         <div class="help-step"><div class="help-step-num">5</div><div class="help-step-body"><strong>Water category/class</strong><p>Go back to the claim and set these in the claim info section. Flood water from outside is always Category 3.</p></div></div>
         <div class="help-step"><div class="help-step-num">6</div><div class="help-step-body"><strong>3+ photos</strong><p>NFIP requires photographic evidence. Upload at least 3 damage photos — more is better.</p></div></div>
       </div>
@@ -1030,24 +1030,24 @@ const HELP_CONTENT = {
     `
   },
   willie: {
-    title: '🌊 Willie AI Assistant',
+    title: '🌊 Aquila AI Assistant',
     html: `
-      <div class="help-tip"><strong>Willie controls the entire app.</strong> You can talk to him like a person and he'll take action — no clicking required.</div>
+      <div class="help-tip"><strong>Aquila controls the entire app.</strong> You can talk to him like a person and he'll take action — no clicking required.</div>
       <div class="help-section">
-        <div class="help-section-title">What Willie can do</div>
-        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>Create &amp; update claims</strong><p>Say "Create a new claim for John Smith at 123 Main St, flood date April 10th" and Willie does it.</p></div></div>
-        <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>Add rooms &amp; line items</strong><p>Say "Add a living room with Cat 3 drywall tear-out 400 sf" and Willie adds the room and the correctly priced line item.</p></div></div>
-        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Move claims through pipeline</strong><p>"Move Maria's claim to Submitted" — Willie updates status and emails the client.</p></div></div>
-        <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>Schedule inspections</strong><p>"Schedule an inspection for claim FC-2026-XXX on May 5th at 10am" — Willie books it and emails the adjuster.</p></div></div>
-        <div class="help-step"><div class="help-step-num">5</div><div class="help-step-body"><strong>Check compliance</strong><p>"Check NFIP compliance on Derek's claim" — Willie returns the score and lists exactly what's missing.</p></div></div>
-        <div class="help-step"><div class="help-step-num">6</div><div class="help-step-body"><strong>Answer NFIP questions</strong><p>Willie knows 2026 pricing rates, water categories, Proof of Loss rules, FEMA zones, and all NFIP procedures.</p></div></div>
+        <div class="help-section-title">What Aquila can do</div>
+        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>Create &amp; update claims</strong><p>Say "Create a new claim for John Smith at 123 Main St, flood date April 10th" and Aquila does it.</p></div></div>
+        <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>Add rooms &amp; line items</strong><p>Say "Add a living room with Cat 3 drywall tear-out 400 sf" and Aquila adds the room and the correctly priced line item.</p></div></div>
+        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Move claims through pipeline</strong><p>"Move Maria's claim to Submitted" — Aquila updates status and emails the client.</p></div></div>
+        <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>Schedule inspections</strong><p>"Schedule an inspection for claim FC-2026-XXX on May 5th at 10am" — Aquila books it and emails the adjuster.</p></div></div>
+        <div class="help-step"><div class="help-step-num">5</div><div class="help-step-body"><strong>Check compliance</strong><p>"Check NFIP compliance on Derek's claim" — Aquila returns the score and lists exactly what's missing.</p></div></div>
+        <div class="help-step"><div class="help-step-num">6</div><div class="help-step-body"><strong>Answer NFIP questions</strong><p>Aquila knows 2026 pricing rates, water categories, Proof of Loss rules, FEMA zones, and all NFIP procedures.</p></div></div>
       </div>
       <div class="help-section">
         <div class="help-section-title">Tips for best results</div>
       </div>
       <div class="help-tip"><strong>Be specific:</strong> Include the claim number or client name when asking about a specific claim.</div>
-      <div class="help-tip"><strong>From a claim page:</strong> Click “🌊 Ask Willie” on any claim — Willie already knows that claim’s full details and can act on it immediately.</div>
-      <div class="help-tip"><strong>Chain requests:</strong> You can ask Willie to do multiple things: “Look up the FEMA zone, check compliance, and tell me what’s missing” — he’ll do all three.</div>
+      <div class="help-tip"><strong>From a claim page:</strong> Click “🌊 Ask Aquila” on any claim — Aquila already knows that claim’s full details and can act on it immediately.</div>
+      <div class="help-tip"><strong>Chain requests:</strong> You can ask Aquila to do multiple things: “Look up the FEMA zone, check compliance, and tell me what’s missing” — he’ll do all three.</div>
     `
   },
   report: {
@@ -1071,7 +1071,7 @@ const HELP_CONTENT = {
         <div class="help-section-title">Priority setup order</div>
         <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>OpenRouter API key</strong><p>Powers AI photo analysis and AI estimates. Get a free key at openrouter.ai. Required for the core AI features.</p></div></div>
         <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>AI Model</strong><p>Pick which model analyzes your photos. GPT-4o is most accurate. Llama 4 Scout is free. Gemini 2.5 Flash is fast and cheap.</p></div></div>
-        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Willie Key + Sync</strong><p>Paste Willie’s widget API key (from AI Agent Widget app → Willie → Edit), then click “⚡ Sync Actions to Willie”. This gives Willie his 28 superpowers.</p></div></div>
+        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Aquila Key + Sync</strong><p>Paste Willie’s widget API key (from AI Agent Widget app → Aquila → Edit), then click “⚡ Sync Actions to Aquila”. This gives Aquila her 28 superpowers.</p></div></div>
         <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>SendGrid</strong><p>Enables automatic client emails on status changes. Free tier sends 100 emails/day. Required for notifications to work.</p></div></div>
         <div class="help-step"><div class="help-step-num">5</div><div class="help-step-body"><strong>Twilio</strong><p>Enables SMS text messages to clients. Optional but great for urgent updates.</p></div></div>
         <div class="help-step"><div class="help-step-num">6</div><div class="help-step-body"><strong>Stripe</strong><p>Only needed if you’re billing other adjusters or firms for using FloodClaim Pro. Not needed for personal use.</p></div></div>
@@ -1084,7 +1084,7 @@ const HELP_CONTENT = {
     html: `
       <div class="help-section">
         <div class="help-section-title">Plans</div>
-        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>Basic — $49/mo</strong><p>Solo adjuster. Up to 25 claims/month. PDF export, Willie AI, client portal, NFIP compliance.</p></div></div>
+        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>Basic — $49/mo</strong><p>Solo adjuster. Up to 25 claims/month. PDF export, Aquila AI, client portal, NFIP compliance.</p></div></div>
         <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>Pro — $99/mo</strong><p>Active adjuster. Up to 100 claims/month. Everything in Basic plus Xactimate export and Analytics.</p></div></div>
         <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Agency — $249/mo</strong><p>Adjusting firm. Unlimited claims, multi-adjuster team, white-label reports, SMS notifications.</p></div></div>
       </div>
@@ -1117,7 +1117,7 @@ const PAGE_HELP_MAP = {
   'compliance':        'compliance',
   'analytics':         'analytics',
   'submit_package_page': 'submit_package',
-  'willie':            'willie',
+  'willie':            'aquila',
   'report':            'report',
   'settings':          'settings',
   'billing':           'billing',
