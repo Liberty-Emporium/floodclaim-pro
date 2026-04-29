@@ -220,10 +220,24 @@
 
     {% if willie_key %}
     <div id="willie-sync-status" style="margin-top:1rem;display:none;"></div>
-    <div style="margin-top:1.25rem;border-top:1px solid #e2e8f0;padding-top:1rem;font-size:.82rem;color:#64748b;">
-      <strong>Willie's current actions:</strong> get_dashboard, list_claims, lookup_claim, get_claim,
-      create_claim, update_claim_status, add_room, list_rooms, add_line_item, delete_room,
-      delete_line_item, get_report, generate_estimate, list_team, add_team_member, delete_team_member, get_settings
+    <div style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem;font-size:.82rem;color:var(--t-secondary);">
+      <strong>Willie's actions (28 total):</strong> get_dashboard, list_claims, lookup_claim, get_claim,
+      create_claim, update_claim_fields, update_claim_status, add_room, list_rooms, add_line_item,
+      delete_room, delete_line_item, get_report, generate_estimate, analyze_photos,
+      schedule_inspection, check_compliance, fema_flood_zone_lookup, notify_client,
+      move_pipeline, get_analytics, get_schedule, list_team, add_team_member,
+      delete_team_member, get_settings
+    </div>
+    <div style="margin-top:1rem;padding:.85rem 1rem;background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.2);border-radius:10px;font-size:.82rem;color:var(--red)">
+      <strong>⚠️ Willie calling himself the wrong name?</strong>
+      Click below after deploying to fix his identity.
+      <form method="POST" action="{{ url_for('willie_fix_identity') }}" style="margin-top:.6rem">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-danger btn-sm"
+                onclick="return confirm('Fix Willie\'s name and identity in the widget?')">
+          🔧 Fix Willie\'s Name
+        </button>
+      </form>
     </div>
     {% endif %}
   </div>

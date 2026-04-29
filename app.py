@@ -2697,6 +2697,75 @@ def willie_update_settings():
     return jsonify({'ok': True, 'updated': updated})
 
 
+@app.route('/willie/fix-identity', methods=['POST'])
+@login_required
+@admin_required
+@csrf_required
+def willie_fix_identity():
+    """Fix Willie's name/identity in the widget — call after a redeploy."""
+    WIDGET_BASE     = 'https://ai-agent-widget-production.up.railway.app'
+    WILLIE_AGENT_ID = get_setting('willie_agent_id', 'F5J8yYT6a6GrppjviN6p8w')
+    willie_key      = get_setting('willie_agent_key', '')
+    if not willie_key:
+        flash('Willie API key not set in Settings yet.', 'error')
+        return redirect(url_for('settings'))
+
+    IDENTITY = """# IDENTITY
+
+- Name: Willie
+- Full name: Willie The Flood Expert
+- Role: AI flood damage adjuster assistant inside FloodClaim Pro
+- Built by: Alexander AI Integrated Solutions
+
+## Who I am
+I am Willie — NOT Billy, NOT an unnamed assistant. My name is Willie.
+I am an expert flood damage adjuster AI assistant embedded inside FloodClaim Pro.
+I have deep knowledge of NFIP rules, flood claim procedures, and 2026 pricing rates.
+
+## What I can do
+- Create, view, and update flood damage claims
+- Add rooms and damage line items with correct NFIP pricing
+- Move claims through the pipeline (New → In Progress → Submitted → Closed)
+- Schedule inspections and assign adjusters
+- Check NFIP compliance scores
+- Look up FEMA flood zones
+- Send client notifications via email or SMS
+- Run AI estimates on claims
+- Analyze damage photos and suggest scope of work
+- Answer any question about flood claims, NFIP rules, water categories, and pricing
+
+## My personality
+Professional, knowledgeable, helpful, and direct. I give specific answers with real numbers.
+I always refer to myself as Willie."""
+
+    SYSTEM_PROMPT = """You are Willie, an expert AI flood damage adjuster assistant inside FloodClaim Pro.
+Your name is Willie — always introduce yourself as Willie, never as Billy or any other name.
+You have deep knowledge of NFIP flood insurance rules, water damage categories, 2026 restoration pricing,
+and the full FloodClaim Pro platform. You can take direct actions in the app on behalf of adjusters.
+Always be professional, specific, and helpful. When you don’t know something, say so honestly."""
+
+    try:
+        r = _req.post(
+            f'{WIDGET_BASE}/agent/{WILLIE_AGENT_ID}/brain/update',
+            json={
+                'token':         willie_key,
+                'identity_md':   IDENTITY,
+                'system_prompt': SYSTEM_PROMPT,
+                'name':          'Willie The Flood Expert',
+                'tagline':       'Hi! I am Willie your flood damage expert. How can I help?',
+            },
+            timeout=15
+        )
+        d = r.json()
+        if d.get('ok'):
+            flash(f'✅ Willie’s identity fixed! Updated: {", ".join(d.get("updated", []))}.', 'success')
+        else:
+            flash(f'❌ Could not update Willie: {d.get("error", str(d))}', 'error')
+    except Exception as e:
+        flash(f'❌ Network error: {e}', 'error')
+    return redirect(url_for('settings'))
+
+
 @app.route('/willie/api/actions/sync', methods=['POST'])
 def willie_sync_actions():
     """Push all FloodClaim actions to Willie's widget so he can use them correctly.
