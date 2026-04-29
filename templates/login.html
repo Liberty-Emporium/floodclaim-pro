@@ -1,57 +1,354 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>FloodClaim Pro — Login</title>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FloodClaim Pro — Sign In</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 <style>
-    html,body{overflow-x:hidden!important;max-width:100%;}
-    img{max-width:100%;height:auto;}
-    @media(max-width:768px){table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;}input,select,textarea{font-size:16px!important;}}
+:root {
+  --bg:       #060C1A;
+  --surface:  #0D1526;
+  --elevated: #121E35;
+  --border:   rgba(255,255,255,0.07);
+  --teal:     #06D6C7;
+  --blue:     #3B7BFF;
+  --cyan:     #22D3EE;
+  --c-text:   #E8F0FF;
+  --c-muted:  #7A8BAD;
+  --grad:     linear-gradient(135deg, #06D6C7 0%, #3B7BFF 100%);
+  --ease:     cubic-bezier(0.4,0,0.2,1);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{-webkit-font-smoothing:antialiased;}
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#0a1628 0%,#0f2040 60%,#060d1a 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem}
-.login-box{background:#fff;border-radius:16px;padding:2.5rem;width:100%;max-width:400px;box-shadow:0 25px 60px rgba(0,0,0,.4)}
-.login-logo{text-align:center;margin-bottom:2rem}
-.login-logo h1{font-size:1.6rem;font-weight:800;color:#0a1628}
-.login-logo h1 span{color:#06b6d4}
-.login-logo p{font-size:.85rem;color:#64748b;margin-top:.25rem}
-.form-group{margin-bottom:1rem}
-.form-group label{display:block;font-size:.8rem;font-weight:600;color:#475569;margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.04em}
-.form-control{width:100%;padding:.7rem 1rem;border:1.5px solid #e2e8f0;border-radius:8px;font-family:inherit;font-size:.95rem;outline:none;transition:border-color .2s}
-.form-control:focus{border-color:#3b82f6}
-.btn{width:100%;padding:.8rem;background:#1e40af;color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:700;cursor:pointer;font-family:inherit;transition:background .2s;margin-top:.5rem}
-.btn:hover{background:#1d35a8}
-.alert{padding:.75rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:.875rem;background:rgba(239,68,68,.1);color:#991b1b;border:1px solid rgba(239,68,68,.2)}
-.demo-hint{margin-top:1.5rem;padding:1rem;background:#f8fafc;border-radius:8px;font-size:.8rem;color:#64748b;text-align:center;border:1px solid #e2e8f0}
-.demo-hint strong{color:#1e40af}
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background: var(--bg);
+  min-height: 100vh;
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  color: var(--c-text);
+  background-image:
+    radial-gradient(ellipse 80% 60% at 0% 0%,   rgba(6,214,199,0.1)  0%, transparent 55%),
+    radial-gradient(ellipse 60% 50% at 100% 100%, rgba(59,123,255,0.1) 0%, transparent 55%);
+}
+
+/* ── LEFT PANEL ── */
+.left-panel {
+  display: none;
+  width: 52%;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(160deg, #06101F 0%, #0A1A38 50%, #060E1C 100%);
+  border-right: 1px solid var(--border);
+}
+@media(min-width: 900px) { .left-panel { display: flex; flex-direction: column; justify-content: center; padding: 4rem; } }
+
+.left-panel-glow {
+  position: absolute; pointer-events: none; border-radius: 50%; filter: blur(80px);
+}
+.glow-1 { width: 500px; height: 500px; background: radial-gradient(circle, rgba(6,214,199,0.22) 0%, transparent 70%); top: -100px; left: -100px; animation: drift1 14s ease-in-out infinite; }
+.glow-2 { width: 400px; height: 400px; background: radial-gradient(circle, rgba(59,123,255,0.2)  0%, transparent 70%); bottom: -80px; right: -80px; animation: drift2 18s ease-in-out infinite; }
+@keyframes drift1 { 0%,100%{transform:translate(0,0);} 50%{transform:translate(40px,30px);} }
+@keyframes drift2 { 0%,100%{transform:translate(0,0);} 50%{transform:translate(-30px,-40px);} }
+
+/* Animated water waves */
+.wave-container { position: absolute; bottom: 0; left: 0; right: 0; height: 220px; overflow: hidden; opacity: 0.35; }
+.wave { position: absolute; bottom: 0; left: 0; width: 200%; height: 100%; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100'%3E%3Cpath fill='%2306D6C7' fill-opacity='0.4' d='M0,50 C360,100 720,0 1080,50 C1260,75 1380,25 1440,50 L1440,100 L0,100 Z'/%3E%3C/svg%3E") repeat-x bottom; animation: wave1 10s linear infinite; }
+.wave2 { animation: wave2 14s linear infinite; opacity: 0.6; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100'%3E%3Cpath fill='%233B7BFF' fill-opacity='0.3' d='M0,60 C300,20 600,80 900,40 C1100,10 1320,70 1440,55 L1440,100 L0,100 Z'/%3E%3C/svg%3E") repeat-x bottom; }
+@keyframes wave1 { from{transform:translateX(0);} to{transform:translateX(-50%);} }
+@keyframes wave2 { from{transform:translateX(-25%);} to{transform:translateX(25%);} }
+
+.left-content { position: relative; z-index: 1; }
+
+.brand-mark {
+  display: flex; align-items: center; gap: 0.75rem;
+  margin-bottom: 3.5rem;
+}
+.brand-icon {
+  width: 48px; height: 48px;
+  background: var(--grad);
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 8px 24px rgba(6,214,199,0.35);
+}
+.brand-name {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.4rem; font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.brand-name span { background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+.panel-headline {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: clamp(2rem, 3.5vw, 2.8rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  margin-bottom: 1.25rem;
+}
+.panel-sub { font-size: 1.05rem; color: var(--c-muted); line-height: 1.7; max-width: 44ch; margin-bottom: 2.5rem; }
+
+.feature-list { display: flex; flex-direction: column; gap: 1rem; }
+.feature-item {
+  display: flex; align-items: center; gap: 0.85rem;
+  padding: 0.9rem 1.1rem;
+  background: rgba(255,255,255,0.035);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+  transition: background 0.2s;
+}
+.feature-item:hover { background: rgba(6,214,199,0.06); }
+.feature-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  box-shadow: 0 0 8px currentColor;
+}
+.dot-teal  { background: var(--teal);  color: var(--teal); }
+.dot-blue  { background: var(--blue);  color: var(--blue); }
+.dot-cyan  { background: var(--cyan);  color: var(--cyan); }
+.feature-text { font-size: 0.88rem; font-weight: 600; color: var(--c-text); }
+
+/* ── RIGHT PANEL (form) ── */
+.right-panel {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center;
+  padding: 2rem 1.5rem;
+  min-width: 0;
+}
+
+.login-card {
+  width: 100%; max-width: 420px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 2.75rem 2.25rem;
+  position: relative;
+  overflow: hidden;
+}
+/* Top gradient line */
+.login-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--grad);
+}
+
+.login-header { text-align: center; margin-bottom: 2rem; }
+.login-icon-wrap {
+  width: 64px; height: 64px; margin: 0 auto 1.25rem;
+  background: linear-gradient(135deg, rgba(6,214,199,0.15) 0%, rgba(59,123,255,0.15) 100%);
+  border: 1px solid rgba(6,214,199,0.2);
+  border-radius: 18px;
+  display: flex; align-items: center; justify-content: center;
+  animation: iconPulse 3s ease infinite;
+}
+@keyframes iconPulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(6,214,199,0.2); }
+  50%      { box-shadow: 0 0 0 10px rgba(6,214,199,0); }
+}
+.login-title { font-family: 'Space Grotesk', sans-serif; font-size: 1.55rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 0.35rem; }
+.login-subtitle { font-size: 0.88rem; color: var(--c-muted); }
+
+.form-group { margin-bottom: 1.25rem; }
+.form-group label {
+  display: block;
+  font-size: 0.75rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--c-muted);
+  margin-bottom: 0.5rem;
+}
+.input-wrap { position: relative; }
+.input-icon {
+  position: absolute; left: 0.95rem; top: 50%; transform: translateY(-50%);
+  color: var(--c-muted); pointer-events: none;
+  display: flex; align-items: center;
+}
+.form-control {
+  width: 100%;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--c-text);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 0.95rem;
+  padding: 0.8rem 1rem 0.8rem 2.75rem;
+  outline: none;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), background 0.2s;
+}
+.form-control::placeholder { color: var(--c-muted); opacity: 0.6; }
+.form-control:focus {
+  border-color: var(--teal);
+  background: rgba(6,214,199,0.04);
+  box-shadow: 0 0 0 3px rgba(6,214,199,0.12);
+}
+
+.btn-login {
+  width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 0.95rem; font-weight: 700;
+  padding: 0.9rem;
+  border: none; border-radius: 12px; cursor: pointer;
+  background: var(--grad);
+  color: #fff;
+  box-shadow: 0 6px 24px rgba(6,214,199,0.3);
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease), filter 0.2s;
+  margin-top: 0.5rem;
+}
+.btn-login:hover { transform: translateY(-2px); box-shadow: 0 10px 32px rgba(6,214,199,0.45); filter: brightness(1.08); }
+.btn-login:active { transform: scale(0.98); }
+
+.alert {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.8rem 1rem;
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: 10px;
+  font-size: 0.85rem; font-weight: 500; color: #FCA5A5;
+  margin-bottom: 1.25rem;
+}
+
+.demo-hint {
+  margin-top: 1.5rem;
+  padding: 1rem 1.1rem;
+  background: rgba(6,214,199,0.05);
+  border: 1px solid rgba(6,214,199,0.12);
+  border-radius: 12px;
+  font-size: 0.82rem; color: var(--c-muted); text-align: center;
+  line-height: 1.6;
+}
+.demo-hint strong { color: var(--teal); }
+.demo-code {
+  display: inline-block;
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.15rem 0.5rem;
+  color: var(--c-text);
+  margin: 0 2px;
+}
+
+/* mobile brand pill at top of form */
+.mobile-brand {
+  display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+  margin-bottom: 1.5rem;
+}
+@media(min-width: 900px) { .mobile-brand { display: none; } }
+.mobile-brand-icon {
+  width: 32px; height: 32px;
+  background: var(--grad); border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+}
+.mobile-brand-name { font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; font-weight: 800; }
+.mobile-brand-name span { background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
 </style>
 </head>
 <body>
-<div class="login-box">
-  <div class="login-logo">
-    <div style="font-size:2.5rem;margin-bottom:.5rem">🌊</div>
-    <h1>Flood<span>Claim</span> Pro</h1>
-    <p>Professional Flood Damage Assessment</p>
+
+<!-- LEFT PANEL -->
+<div class="left-panel">
+  <div class="left-panel-glow glow-1"></div>
+  <div class="left-panel-glow glow-2"></div>
+  <div class="wave-container">
+    <div class="wave"></div>
+    <div class="wave wave2"></div>
   </div>
-  {% for msg in get_flashed_messages(category_filter=['error']) %}
-    <div class="alert">{{ msg }}</div>
-  {% endfor %}
-  <form method="POST">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div class="form-group">
-      <label>Email Address</label>
-      <input class="form-control" type="email" name="email" placeholder="you@example.com" required autofocus/>
+
+  <div class="left-content">
+    <div class="brand-mark">
+      <div class="brand-icon">
+        <i data-lucide="waves" style="width:22px;height:22px;color:#fff;"></i>
+      </div>
+      <div class="brand-name">Flood<span>Claim Pro</span></div>
     </div>
-    <div class="form-group">
-      <label>Password</label>
-      <input class="form-control" type="password" name="password" placeholder="••••••••" required/>
+
+    <h1 class="panel-headline">
+      Professional<br>Flood Damage<br><span style="background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Assessment</span>
+    </h1>
+    <p class="panel-sub">
+      Streamline every claim from first inspection to final settlement — with AI-powered photo analysis and FEMA-compliant reporting.
+    </p>
+
+    <div class="feature-list">
+      <div class="feature-item">
+        <span class="feature-dot dot-teal"></span>
+        <span class="feature-text">AI photo analysis — instant damage classification</span>
+      </div>
+      <div class="feature-item">
+        <span class="feature-dot dot-blue"></span>
+        <span class="feature-text">FEMA NFIP &amp; private flood insurance workflows</span>
+      </div>
+      <div class="feature-item">
+        <span class="feature-dot dot-cyan"></span>
+        <span class="feature-text">Client portal with real-time claim status</span>
+      </div>
     </div>
-    <button class="btn" type="submit">Sign In →</button>
-  </form>
-  <div class="demo-hint">
-    <strong>Demo:</strong> admin@floodclaimpro.com / admin1234
   </div>
 </div>
+
+<!-- RIGHT PANEL -->
+<div class="right-panel">
+  <div class="login-card">
+
+    <div class="mobile-brand">
+      <div class="mobile-brand-icon">
+        <i data-lucide="waves" style="width:16px;height:16px;color:#fff;"></i>
+      </div>
+      <div class="mobile-brand-name">Flood<span>Claim Pro</span></div>
+    </div>
+
+    <div class="login-header">
+      <div class="login-icon-wrap">
+        <i data-lucide="lock" style="width:26px;height:26px;color:var(--teal);"></i>
+      </div>
+      <h1 class="login-title">Welcome back</h1>
+      <p class="login-subtitle">Sign in to your account</p>
+    </div>
+
+    {% for msg in get_flashed_messages(category_filter=['error']) %}
+    <div class="alert">
+      <i data-lucide="alert-circle" style="width:15px;height:15px;flex-shrink:0;"></i>
+      {{ msg }}
+    </div>
+    {% endfor %}
+
+    <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-group">
+        <label>Email Address</label>
+        <div class="input-wrap">
+          <span class="input-icon"><i data-lucide="mail" style="width:15px;height:15px;"></i></span>
+          <input class="form-control" type="email" name="email" placeholder="you@example.com" required autofocus/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <div class="input-wrap">
+          <span class="input-icon"><i data-lucide="key-round" style="width:15px;height:15px;"></i></span>
+          <input class="form-control" type="password" name="password" placeholder="••••••••" required/>
+        </div>
+      </div>
+      <button type="submit" class="btn-login">
+        <i data-lucide="log-in" style="width:16px;height:16px;"></i>
+        Sign In
+      </button>
+    </form>
+
+    <div class="demo-hint">
+      <strong>Demo Access</strong><br>
+      <span class="demo-code">admin@floodclaimpro.com</span> / <span class="demo-code">admin1234</span>
+    </div>
+
+  </div>
+</div>
+
+<script>lucide.createIcons();</script>
 </body>
 </html>
