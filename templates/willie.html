@@ -170,12 +170,14 @@
         <div class="welcome-title">Hey, I'm Willie</div>
         <div class="welcome-sub">Your flood damage expert. Ask me anything about claims, damage assessment, insurance, or anything inside FloodClaim Pro.</div>
         <div class="quick-prompts">
-          <button class="qp" onclick="quickSend('What should I do first after a flood?')">🚨 First steps after a flood</button>
-          <button class="qp" onclick="quickSend('How do I document flood damage properly?')">📸 Document damage</button>
-          <button class="qp" onclick="quickSend('What are the claim statuses and what does each mean?')">📋 Claim statuses</button>
-          <button class="qp" onclick="quickSend('How do I create a new claim?')">➕ Create a claim</button>
-          <button class="qp" onclick="quickSend('What is Category 3 black water damage?')">💧 Water categories</button>
-          <button class="qp" onclick="quickSend('How do I generate a report for insurance?')">📄 Generate report</button>
+          <button class="qp" onclick="quickSend('Show me a dashboard summary — how many claims do I have and what is my pipeline value?')">📊 Dashboard summary</button>
+          <button class="qp" onclick="quickSend('List all my open claims and tell me which ones need the most attention')">🚨 Claims needing attention</button>
+          <button class="qp" onclick="quickSend('What are my inspections scheduled for today and this week?')">📅 Today\'s schedule</button>
+          <button class="qp" onclick="quickSend('What is Category 3 black water damage and how does it affect pricing?')">💧 Water categories</button>
+          <button class="qp" onclick="quickSend('What do I need to complete before submitting a claim to the carrier? Check NFIP compliance requirements.')">✅ Pre-submission checklist</button>
+          <button class="qp" onclick="quickSend('What is the average payout for a flood claim and how should I price drywall tear-out?')">💰 Pricing guidance</button>
+          <button class="qp" onclick="quickSend('What are the most important NFIP deadlines I need to know?')">⏰ NFIP deadlines</button>
+          <button class="qp" onclick="quickSend('Walk me through creating a new claim step by step')">➕ Create a claim</button>
         </div>
       </div>
     </div>
@@ -200,6 +202,9 @@ let currentConvId = null;
 let chatHistory   = [];
 let isThinking    = false;
 const SESSION_ID  = 'willie-{{ session.user_id }}-' + Date.now();
+// Context: claim_id if navigated from a claim page
+const CLAIM_ID    = new URLSearchParams(window.location.search).get('claim_id') || null;
+const PAGE_CTX    = document.title || 'FloodClaim Pro';
 
 function autoResize(el) {
   el.style.height = 'auto';
@@ -350,12 +355,14 @@ async function sendMessage() {
   try {
     const res = await fetch('/willie/chat', {
       method:'POST', credentials: 'include',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json', 'X-CSRF-Token': (document.querySelector('meta[name="csrf"]')||{}).content||''},
       body: JSON.stringify({
         message:         text,
         history:         chatHistory.slice(-12),
         conversation_id: currentConvId,
-        session_id:      SESSION_ID
+        session_id:      SESSION_ID,
+        claim_id:        CLAIM_ID ? parseInt(CLAIM_ID) : null,
+        context:         PAGE_CTX
       })
     });
     const data = await res.json();
@@ -364,7 +371,7 @@ async function sendMessage() {
     addMessage('willie', reply);
     chatHistory.push({role:'assistant', content:reply});
 
-    // Update sidebar title
+    // Update sidebar title after first exchange
     if (chatHistory.length === 2) {
       const titleEl = document.querySelector(`#conv-${currentConvId} .conv-title`);
       if (titleEl) titleEl.textContent = text.slice(0,50) + (text.length>50?'...':'');

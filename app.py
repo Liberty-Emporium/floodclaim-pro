@@ -1910,32 +1910,173 @@ def willie_save_message(conv_id):
 @app.route('/willie/chat', methods=['POST'])
 @login_required
 def willie_chat():
-    """Proxy to the Willie AI widget endpoint and save to history."""
+    """Smart Willie chat proxy — injects live app context into every message."""
     data       = request.get_json(silent=True) or {}
     message    = data.get('message', '').strip()
     history    = data.get('history', [])
     conv_id    = data.get('conversation_id')
     session_id = data.get('session_id', '')
+    claim_id   = data.get('claim_id')       # passed when chatting from a claim page
+    context_hint = data.get('context', '') # page context hint
     if not message:
         return jsonify({'error': 'message required'}), 400
 
     WILLIE_AGENT_ID = get_setting('willie_agent_id', 'F5J8yYT6a6GrppjviN6p8w')
     WIDGET_BASE     = 'https://ai-agent-widget-production.up.railway.app'
+    FLOOD_BASE      = request.host_url.rstrip('/')
+    flood_token     = get_willie_token()
+
+    # ── Build rich live context ─────────────────────────────────────────
+    db = get_db()
+    now_str = datetime.datetime.now().strftime('%A %B %d, %Y %I:%M %p')
+
+    # Dashboard stats
+    if session['role'] == 'admin':
+        all_claims = db.execute('SELECT id, claim_number, client_name, property_address, status, total_estimate, flood_date, adjuster_id FROM claims ORDER BY created_at DESC').fetchall()
+    else:
+        all_claims = db.execute('SELECT id, claim_number, client_name, property_address, status, total_estimate, flood_date, adjuster_id FROM claims WHERE adjuster_id=? ORDER BY created_at DESC', (session['user_id'],)).fetchall()
+
+    stats = {
+        'total': len(all_claims),
+        'new': sum(1 for c in all_claims if c['status'] == 'New'),
+        'in_progress': sum(1 for c in all_claims if c['status'] == 'In Progress'),
+        'submitted': sum(1 for c in all_claims if c['status'] == 'Submitted'),
+        'closed': sum(1 for c in all_claims if c['status'] == 'Closed'),
+        'pipeline': sum(c['total_estimate'] for c in all_claims if c['status'] != 'Closed'),
+    }
+
+    # Recent claims summary (last 10)
+    recent_summary = '\n'.join(
+        f'  - [{c["id"]}] {c["claim_number"]} | {c["client_name"]} | {c["property_address"][:40]} | {c["status"]} | ${c["total_estimate"]:,.0f}'
+        for c in all_claims[:10]
+    ) or '  (no claims yet)'
+
+    # Current claim context (if on a claim page)
+    claim_context = ''
+    if claim_id:
+        claim = db.execute('''
+            SELECT c.*, u.name as adjuster_name
+            FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id
+            WHERE c.id=?
+        ''', (claim_id,)).fetchone()
+        if claim:
+            rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+            room_lines = []
+            for room in rooms:
+                items = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
+                item_text = ', '.join(f'{i["description"]} ({i["quantity"]} {i["unit"]} @ ${i["unit_cost"]})' for i in items) or 'no items yet'
+                room_lines.append(f'    Room [{room["id"]}] {room["name"]} (${room["subtotal"]:,.2f}): {item_text}')
+            photos = db.execute('SELECT COUNT(*) as c FROM photos WHERE claim_id=?', (claim_id,)).fetchone()
+
+            _nl = chr(10)
+            rooms_text = _nl.join(room_lines) if room_lines else '    (no rooms added yet)'
+            claim_context = (
+                _nl + '┌─ CURRENT CLAIM (you are viewing this right now) ─────────────────────────' + _nl
+                + f'| Claim ID: {claim["id"]} | Claim #: {claim["claim_number"]}' + _nl
+                + f'| Client: {claim["client_name"]} | Phone: {claim["client_phone"] or "N/A"}' + _nl
+                + f'| Property: {claim["property_address"]}' + _nl
+                + f'| Status: {claim["status"]} | Priority: {claim["priority"] or "Normal"}' + _nl
+                + f'| Flood Date: {claim["flood_date"]} | Source: {claim["flood_source"] or "N/A"}' + _nl
+                + f'| Water: Category {claim["water_category"] or "?"} / Class {claim["water_class"] or "?"} / {claim["water_depth_in"] or "?"} inches' + _nl
+                + f'| Insurance: {claim["insurance_company"] or "N/A"} | Policy: {claim["policy_number"] or "N/A"}' + _nl
+                + f'| Coverage: Bldg ${claim["coverage_building"]:,.0f} | Contents ${claim["coverage_contents"]:,.0f} | Deductible ${claim["deductible"]:,.0f}' + _nl
+                + f'| FEMA Zone: {claim["flood_zone"] or "NOT LOOKED UP"} | Map: {claim["fema_map_number"] or "N/A"}' + _nl
+                + f'| Total Estimate: ${claim["total_estimate"]:,.2f} | Photos: {photos["c"]}' + _nl
+                + f'| Adjuster: {claim["adjuster_name"] or "Unassigned"}' + _nl
+                + f'| Rooms ({len(rooms)}):' + _nl
+                + rooms_text + _nl
+                + '└' + '─' * 65
+            )
+
+    # Today's inspections
+    today_str = datetime.date.today().isoformat()
+    todays_slots = db.execute('''
+        SELECT s.*, c.claim_number, c.client_name, c.property_address
+        FROM inspection_slots s JOIN claims c ON s.claim_id=c.id
+        WHERE s.slot_date=? AND s.status != 'cancelled'
+        ORDER BY s.slot_time
+    ''', (today_str,)).fetchall()
+    todays_insp = '\n'.join(
+        f'  {s["slot_time"]} — {s["claim_number"]} ({s["client_name"]}) at {s["property_address"][:50]}'
+        for s in todays_slots
+    ) or '  None scheduled today'
+
+    # Build the enriched system context injected as first message
+    system_context = f"""You are Willie, an expert AI flood damage adjuster assistant embedded inside FloodClaim Pro.
+You have FULL CONTROL of the app and can take actions directly on behalf of the adjuster.
+Always be helpful, concise, and professional. Use your knowledge of NFIP rules and flood claim procedures.
+
+CURRENT USER: {session.get('name') or session.get('email')} (role: {session.get('role', 'adjuster')})
+CURRENT TIME: {now_str}
+PAGE CONTEXT: {context_hint or 'Dashboard'}
+
+APP SNAPSHOT:
+- Total claims: {stats['total']} | New: {stats['new']} | In Progress: {stats['in_progress']} | Submitted: {stats['submitted']} | Closed: {stats['closed']}
+- Open pipeline value: ${stats['pipeline']:,.2f}
+- Today's inspections: 
+{todays_insp}
+
+RECENT CLAIMS (use claim IDs below for API actions):
+{recent_summary}
+{claim_context}
+YOUR CAPABILITIES (you can do all of these right now):
+1. CREATE claims — just ask for client name, address, flood date
+2. UPDATE any claim field — status, priority, water category, coverage, notes, etc.
+3. ADD rooms and line items to any claim with exact pricing
+4. LOOK UP claims by name, number, or address
+5. RUN AI estimates on any claim
+6. ANALYZE photos on any claim and suggest rooms/items
+7. SCHEDULE inspections with date, time, adjuster
+8. MOVE claims between pipeline stages
+9. CHECK NFIP compliance score for any claim
+10. LOOK UP FEMA flood zones by address
+11. SEND client notifications
+12. VIEW analytics and team data
+13. ADD team members
+14. ANSWER any question about NFIP rules, flood damage, water categories, pricing, procedures
+
+NFIP EXPERTISE:
+- Water Categories: Cat 1=clean, Cat 2=gray water, Cat 3=black/flood water (always Cat 3 for rising floodwater)
+- Water Classes: 1=floors only, 2=walls up 24”, 3=ceiling wet, 4=hardwood/brick specialty drying
+- Proof of Loss must be filed within 60 days of flood date or claim is denied
+- 2026 national avg flood claim: $10,234-$11,605 | Full restoration: $5,000-$16,000
+- Mitigation rates: Cat3 extraction $0.75-$1.50/sf, air movers $38-$55/day, dehumidifier $83-$110/day
+- Drywall Cat3 tear-out: $1.79/sf | LVP/vinyl: $1.25-$2.00/sf | Hardwood: $5.82/sf
+- Reconstruction: drywall $3.99-$5.50/sf | paint $1.50-$2.50/sf | baseboard R&R $5.51/lf
+- FEMA flood zones: A/AE/AO/AH=high risk, B/X=moderate, C/X=minimal risk
+
+When the user asks you to DO something (create a claim, add a room, update status, etc.):
+1. Confirm what you are about to do
+2. Use your API actions to execute it immediately
+3. Report back what was done with specifics
+4. Suggest the logical next step
+
+When asked for advice, give specific, actionable NFIP-compliant guidance.
+When referencing a claim, always use its claim number AND name so it's clear."""
+
+    # Build payload with context prepended as a system message in history
+    enriched_history = [
+        {'role': 'system', 'content': system_context}
+    ] + history[-8:]
 
     try:
-        payload = json.dumps({'message': message, 'history': history[-10:],
-                              'session_id': session_id or f'willie-{session["user_id"]}'}).encode()
-        req = _req.post(f'{WIDGET_BASE}/chat/{WILLIE_AGENT_ID}',
-                        headers={'Content-Type': 'application/json'},
-                        data=payload, timeout=30)
-        result  = req.json()  # req.json() returns a dict — .get() is safe here
-        reply   = result.get('reply', 'Willie is unavailable right now.')
+        payload = json.dumps({
+            'message':    message,
+            'history':    enriched_history,
+            'session_id': session_id or f'willie-{session["user_id"]}'
+        }).encode()
+        req = _req.post(
+            f'{WIDGET_BASE}/chat/{WILLIE_AGENT_ID}',
+            headers={'Content-Type': 'application/json'},
+            data=payload, timeout=45
+        )
+        result = req.json()
+        reply  = result.get('reply', 'Willie is unavailable right now.')
     except Exception as e:
-        reply = f'Willie is unavailable right now. ({str(e)[:60]})'
+        reply = f'Willie is unavailable right now. ({str(e)[:80]})'
 
-    # Save both messages to history if conv_id provided
+    # Save to conversation history
     if conv_id:
-        db = get_db()
         conv = db.execute('SELECT * FROM willie_conversations WHERE id=? AND user_id=?',
                           (conv_id, session['user_id'])).fetchone()
         if conv:
@@ -2715,6 +2856,78 @@ def willie_sync_actions():
             'headers':     {'Authorization': f'Bearer {flood_token}'},
             'body':        {},
         },
+        {
+            'name':        'schedule_inspection',
+            'description': 'Schedule an inspection for a claim. Requires claim_id, date (YYYY-MM-DD), time (HH:MM). Optional: adjuster_id, notes.',
+            'method':      'POST',
+            'url':         f'{FLOOD_BASE}/willie/api/claims/{{claim_id}}/schedule',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {{'date': '{{date}}', 'time': '{{time}}', 'notes': '{{notes}}'}},
+        },
+        {
+            'name':        'check_compliance',
+            'description': 'Check NFIP compliance score for a claim. Returns percent complete, grade, and list of missing items. Use before submitting.',
+            'method':      'GET',
+            'url':         f'{FLOOD_BASE}/willie/api/claims/{{claim_id}}/compliance',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {{}},
+        },
+        {
+            'name':        'fema_flood_zone_lookup',
+            'description': 'Look up the FEMA flood zone for a claim property address. Updates the claim automatically.',
+            'method':      'POST',
+            'url':         f'{FLOOD_BASE}/willie/api/claims/{{claim_id}}/fema-lookup',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {{}},
+        },
+        {
+            'name':        'notify_client',
+            'description': 'Send a notification to the client. Requires claim_id and message. Optional: method (email, sms, both).',
+            'method':      'POST',
+            'url':         f'{FLOOD_BASE}/willie/api/claims/{{claim_id}}/notify',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {{'message': '{{message}}', 'method': '{{method}}'}},
+        },
+        {
+            'name':        'move_pipeline',
+            'description': 'Move a claim to a new pipeline stage. Status must be: New, In Progress, Submitted, or Closed. Also notifies client.',
+            'method':      'POST',
+            'url':         f'{FLOOD_BASE}/willie/api/claims/{{claim_id}}/move-pipeline',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {{'status': '{{status}}'}},
+        },
+        {
+            'name':        'get_analytics',
+            'description': 'Get business analytics: total claims, pipeline value, closed revenue, average cycle time, status breakdown.',
+            'method':      'GET',
+            'url':         f'{FLOOD_BASE}/willie/api/analytics',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {{}},
+        },
+        {
+            'name':        'get_schedule',
+            'description': 'Get all upcoming scheduled inspections from today onward.',
+            'method':      'GET',
+            'url':         f'{FLOOD_BASE}/willie/api/schedule',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {{}},
+        },
+        {
+            'name':        'analyze_photos',
+            'description': 'Run AI vision analysis on all claim photos. Returns water category, damage summary, suggested rooms and line items. Use update_claim to apply the recommendations.',
+            'method':      'POST',
+            'url':         f'{FLOOD_BASE}/willie/api/claims/{{claim_id}}/analyze',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {{}},
+        },
+        {
+            'name':        'update_claim_fields',
+            'description': 'Update multiple fields on a claim at once. Can set water_category, water_class, flood_source, cause_of_loss, notes, priority, coverage_building, coverage_contents, deductible, policy_number, insurance_company, etc.',
+            'method':      'POST',
+            'url':         f'{FLOOD_BASE}/willie/api/claims/{{claim_id}}/update',
+            'headers':     {'Authorization': f'Bearer {flood_token}'},
+            'body':        {{'water_category': '{{water_category}}', 'water_class': '{{water_class}}', 'notes': '{{notes}}', 'priority': '{{priority}}'}},
+        },
     ]
 
     pushed = []
@@ -2791,6 +3004,203 @@ def willie_update_claim(claim_id):
         'message': f'Updated {len(updates)} field(s) on claim {claim["claim_number"]}',
         'claim':   {k: updated_claim.get(k) for k in updates},
     })
+
+
+# ── Willie: Schedule Inspection ────────────────────────────────────────────────
+@app.route('/willie/api/claims/<int:claim_id>/schedule', methods=['POST'])
+def willie_schedule_inspection(claim_id):
+    if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
+    db    = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim: return jsonify({'error': 'Claim not found'}), 404
+    data      = request.get_json(silent=True) or {}
+    slot_date = data.get('date', '').strip()
+    slot_time = data.get('time', '09:00').strip()
+    adj_id    = data.get('adjuster_id') or claim['adjuster_id']
+    notes     = data.get('notes', '').strip()
+    if not slot_date:
+        return jsonify({'error': 'date is required (YYYY-MM-DD)'}), 400
+    db.execute(
+        'INSERT INTO inspection_slots (claim_id, adjuster_id, slot_date, slot_time, notes) VALUES (?,?,?,?,?)',
+        (claim_id, adj_id, slot_date, slot_time, notes)
+    )
+    db.execute('UPDATE claims SET sched_date=?, sched_time=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+               (slot_date, slot_time, claim_id))
+    db.commit()
+    _log_activity(claim_id, f'Inspection scheduled for {slot_date} at {slot_time} (by Willie)', 'Willie')
+    return jsonify({'ok': True, 'claim_id': claim_id, 'date': slot_date, 'time': slot_time,
+                    'message': f'Inspection scheduled for {claim["claim_number"]} on {slot_date} at {slot_time}'})
+
+
+# ── Willie: Compliance Score ────────────────────────────────────────────────
+@app.route('/willie/api/claims/<int:claim_id>/compliance', methods=['GET'])
+def willie_compliance_check(claim_id):
+    if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
+    db    = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim: return jsonify({'error': 'Claim not found'}), 404
+    rooms  = db.execute('SELECT id FROM rooms WHERE claim_id=?', (claim_id,)).fetchall()
+    photos = db.execute('SELECT id FROM photos WHERE claim_id=?', (claim_id,)).fetchall()
+    checks = {
+        'policy_number':     bool(claim['policy_number']),
+        'policy_type':       bool(claim['policy_type']),
+        'coverage_building': bool(claim['coverage_building']),
+        'coverage_contents': bool(claim['coverage_contents']),
+        'deductible':        bool(claim['deductible']),
+        'flood_date':        bool(claim['flood_date']),
+        'flood_source':      bool(claim['flood_source']),
+        'water_category':    bool(claim['water_category']),
+        'water_class':       bool(claim['water_class']),
+        'water_depth':       bool(claim['water_depth_in']),
+        'date_water_removed':bool(claim['date_water_removed']),
+        'inspection_date':   bool(claim['inspection_date']),
+        'flood_zone':        bool(claim['flood_zone'] and claim['flood_zone'] != 'Unknown'),
+        'fema_map':          bool(claim['fema_map_number']),
+        'photos_3plus':      len(photos) >= 3,
+        'rooms_documented':  len(rooms) >= 1,
+        'estimate_done':     bool(claim['total_estimate']),
+    }
+    score   = sum(1 for v in checks.values() if v)
+    total   = len(checks)
+    pct     = round(score / total * 100)
+    missing = [k for k, v in checks.items() if not v]
+    grade   = 'Excellent' if pct >= 90 else 'Good' if pct >= 75 else 'Needs Work' if pct >= 50 else 'Incomplete'
+    # 60-day deadline
+    deadline = None
+    if claim['flood_date']:
+        try:
+            dl = datetime.datetime.strptime(claim['flood_date'], '%Y-%m-%d') + datetime.timedelta(days=60)
+            deadline = dl.strftime('%B %d, %Y')
+        except Exception:
+            pass
+    return jsonify({'ok': True, 'claim_id': claim_id, 'claim_number': claim['claim_number'],
+                    'score': score, 'total': total, 'percent': pct, 'grade': grade,
+                    'missing': missing, 'proof_of_loss_deadline': deadline,
+                    'message': f'{claim["claim_number"]} is {pct}% complete ({grade}). Missing: {missing if missing else "nothing"}'})
+
+
+# ── Willie: FEMA Lookup ────────────────────────────────────────────────────
+@app.route('/willie/api/claims/<int:claim_id>/fema-lookup', methods=['POST'])
+def willie_fema_lookup(claim_id):
+    if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
+    db    = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim: return jsonify({'error': 'Claim not found'}), 404
+    result = lookup_fema_flood_zone(claim['property_address'])
+    if result and result.get('flood_zone'):
+        db.execute('''
+            UPDATE claims SET flood_zone=?, fema_map_number=?, lat=?, lng=?,
+            maps_embed_url=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
+        ''', (result['flood_zone'], result.get('fema_map_number',''),
+              result.get('lat',0), result.get('lng',0), result.get('maps_embed_url',''), claim_id))
+        db.commit()
+        _log_activity(claim_id, f'FEMA flood zone looked up: Zone {result["flood_zone"]} (by Willie)', 'Willie')
+        return jsonify({'ok': True, 'flood_zone': result['flood_zone'],
+                        'fema_map_number': result.get('fema_map_number'),
+                        'message': f'FEMA lookup complete. Zone: {result["flood_zone"]}, Map Panel: {result.get("fema_map_number","N/A")}'})
+    return jsonify({'ok': False, 'error': 'Could not determine flood zone for this address'})
+
+
+# ── Willie: Send Notification ────────────────────────────────────────────────
+@app.route('/willie/api/claims/<int:claim_id>/notify', methods=['POST'])
+def willie_notify_client(claim_id):
+    if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
+    db    = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim: return jsonify({'error': 'Claim not found'}), 404
+    data    = request.get_json(silent=True) or {}
+    message = data.get('message', '').strip()
+    method  = data.get('method', 'email').lower()  # email or sms
+    if not message:
+        return jsonify({'error': 'message is required'}), 400
+    sent_email = sent_sms_flag = False
+    if method in ('email', 'both') and claim['client_email']:
+        subject = f'Update on your FloodClaim — {claim["claim_number"]}'
+        html = f'<div style="font-family:sans-serif"><h2>FloodClaim Pro Update</h2><p>Hello {claim["client_name"]},</p><p>{message}</p><hr><small>Claim: {claim["claim_number"]}</small></div>'
+        sent_email = send_email(claim['client_email'], subject, html)
+        if sent_email:
+            _log_notification(claim_id, 'manual', claim['client_email'], message)
+    if method in ('sms', 'both'):
+        sent_sms_flag = notify_client_sms(claim, f'FloodClaim Pro | {claim["claim_number"]}: {message}')
+    result = []
+    if sent_email: result.append('email')
+    if sent_sms_flag: result.append('SMS')
+    if not result:
+        return jsonify({'ok': False, 'message': 'Notification not sent — check SendGrid/Twilio config in Settings'})
+    _log_activity(claim_id, f'Notification sent via {" and ".join(result)} (by Willie)', 'Willie')
+    return jsonify({'ok': True, 'sent_via': result,
+                    'message': f'Notification sent to {claim["client_name"]} via {" and ".join(result)}'})
+
+
+# ── Willie: Move Pipeline Status ────────────────────────────────────────────────
+@app.route('/willie/api/claims/<int:claim_id>/move-pipeline', methods=['POST'])
+def willie_move_pipeline(claim_id):
+    if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
+    data   = request.get_json(silent=True) or {}
+    status = data.get('status', '').strip()
+    valid  = ['New', 'In Progress', 'Submitted', 'Closed']
+    if status not in valid:
+        return jsonify({'error': f'status must be one of {valid}'}), 400
+    db    = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim: return jsonify({'error': 'Claim not found'}), 404
+    old_status = claim['status']
+    db.execute('UPDATE claims SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', (status, claim_id))
+    db.commit()
+    if old_status != status:
+        notify_client_status_change(claim, status)
+        _log_activity(claim_id, f'Moved from {old_status} → {status} (by Willie)', 'Willie')
+    return jsonify({'ok': True, 'old_status': old_status, 'new_status': status,
+                    'message': f'{claim["claim_number"]} moved from {old_status} to {status}'})
+
+
+# ── Willie: Analytics Summary ────────────────────────────────────────────────
+@app.route('/willie/api/analytics', methods=['GET'])
+def willie_analytics():
+    if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
+    db     = get_db()
+    claims = db.execute('SELECT * FROM claims ORDER BY created_at ASC').fetchall()
+    closed = [c for c in claims if c['status'] == 'Closed']
+    open_c = [c for c in claims if c['status'] != 'Closed']
+    cycle_times = []
+    for c in closed:
+        try:
+            s = datetime.datetime.fromisoformat(c['created_at'])
+            e = datetime.datetime.fromisoformat(c['updated_at'])
+            diff = (e - s).days
+            if diff >= 0: cycle_times.append(diff)
+        except Exception:
+            pass
+    avg_cycle = round(sum(cycle_times)/len(cycle_times), 1) if cycle_times else None
+    return jsonify({'ok': True,
+                    'total_claims':    len(claims),
+                    'open_pipeline':   sum(c['total_estimate'] for c in open_c),
+                    'closed_revenue':  sum(c['total_estimate'] for c in closed),
+                    'avg_cycle_days':  avg_cycle,
+                    'new':             sum(1 for c in claims if c['status'] == 'New'),
+                    'in_progress':     sum(1 for c in claims if c['status'] == 'In Progress'),
+                    'submitted':       sum(1 for c in claims if c['status'] == 'Submitted'),
+                    'closed':          len(closed),
+                    'message': f'{len(claims)} total claims. Pipeline: ${sum(c["total_estimate"] for c in open_c):,.2f}. Avg cycle: {avg_cycle} days.'})
+
+
+# ── Willie: Get Upcoming Schedule ───────────────────────────────────────────────
+@app.route('/willie/api/schedule', methods=['GET'])
+def willie_get_schedule():
+    if not willie_auth(): return jsonify({'error': 'unauthorized'}), 401
+    db    = get_db()
+    today = datetime.date.today().isoformat()
+    slots = db.execute('''
+        SELECT s.*, c.claim_number, c.client_name, c.property_address, u.name as adjuster_name
+        FROM inspection_slots s
+        JOIN claims c ON s.claim_id=c.id
+        LEFT JOIN users u ON s.adjuster_id=u.id
+        WHERE s.slot_date >= ? AND s.status != 'cancelled'
+        ORDER BY s.slot_date, s.slot_time LIMIT 20
+    ''', (today,)).fetchall()
+    return jsonify({'ok': True, 'today': today, 'upcoming': [dict(s) for s in slots],
+                    'count': len(slots),
+                    'message': f'{len(slots)} upcoming inspection(s) from today onward'})
 
 
 @app.route('/willie/api/claims/<int:claim_id>/analyze', methods=['POST'])
