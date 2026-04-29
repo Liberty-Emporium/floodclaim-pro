@@ -1,4 +1,4 @@
-import os, sqlite3, secrets, hashlib, json, datetime, pathlib, base64, io
+import os, sqlite3, secrets, hashlib, json, datetime, pathlib, base64, io, zipfile, xml.etree.ElementTree as _ET
 try:
     import bcrypt as _bcrypt
     BCRYPT_OK = True
@@ -3625,6 +3625,462 @@ def analytics():
                            chart_counts=json.dumps(chart_counts),
                            chart_values=json.dumps(chart_values),
                            top_adjusters=top_adjusters)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SUBMIT PACKAGE — one-click carrier submission export
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _build_proof_of_loss_text(claim, rooms, room_data):
+    """Generate a plain-text Proof of Loss document pre-filled with claim data."""
+    now  = datetime.datetime.now().strftime('%B %d, %Y')
+    lines = [
+        'PROOF OF LOSS',
+        'NATIONAL FLOOD INSURANCE PROGRAM (NFIP)',
+        'Standard Flood Insurance Policy',
+        '=' * 60,
+        '',
+        f'Date of Statement:        {now}',
+        f'Claim Number:             {claim["claim_number"]}',
+        f'Policy Number:            {claim["policy_number"] or "_________________________"}',
+        f'Policy Type:              {claim["policy_type"] or "Building + Contents"}',
+        f'Insurance Company:        {claim["insurance_company"] or "_________________________"}',
+        '',
+        'INSURED (POLICYHOLDER)',
+        '-' * 40,
+        f'Name:                     {claim["client_name"]}',
+        f'Phone:                    {claim["client_phone"] or "_________________________"}',
+        f'Email:                    {claim["client_email"] or "_________________________"}',
+        '',
+        'PROPERTY',
+        '-' * 40,
+        f'Property Address:         {claim["property_address"]}',
+        f'Property Type:            {claim["property_type"] or "_________________________"}',
+        f'Year Built:               {claim["year_built"] or "_________________________"}',
+        f'Square Footage:           {claim["property_sqft"] or "_________________________"}',
+        f'FEMA Flood Zone:          {claim["flood_zone"] or "_________________________"}',
+        f'FEMA Map Panel Number:    {claim["fema_map_number"] or "_________________________"}',
+        '',
+        'LOSS INFORMATION',
+        '-' * 40,
+        f'Date of Loss:             {claim["flood_date"]}',
+        f'Cause of Loss:            {claim["flood_source"] or claim["cause_of_loss"] or "Flood"}',
+        f'Water Category:           Category {claim["water_category"] or "3"} (Flood water)',
+        f'Water Class:              Class {claim["water_class"] or "_"}',
+        f'Water Depth (inches):     {claim["water_depth_in"] or "_________________________"}',
+        f'Date Water Removed:       {claim["date_water_removed"] or "_________________________"}',
+        f'Inspection Date:          {claim["inspection_date"] or "_________________________"}',
+        '',
+        'COVERAGE',
+        '-' * 40,
+        f'Building Coverage:        ${claim["coverage_building"]:,.2f}',
+        f'Contents Coverage:        ${claim["coverage_contents"]:,.2f}',
+        f'Deductible:               ${claim["deductible"]:,.2f}',
+        '',
+        'MORTGAGE',
+        '-' * 40,
+        f'Mortgage Company:         {claim["mortgage_company"] or "N/A"}',
+        f'Loan Number:              {claim["mortgage_loan_number"] or "N/A"}',
+        '',
+        'DAMAGE SUMMARY BY ROOM',
+        '-' * 40,
+    ]
+    for rd in room_data:
+        room  = rd['room']
+        items = rd['line_items']
+        lines.append(f'\n  {room["name"]}   Subtotal: ${room["subtotal"]:,.2f}')
+        for item in items:
+            lines.append(f'    - {item["description"]:40s}  {item["quantity"]} {item["unit"]:8s}  '
+                         f'@ ${item["unit_cost"]:8.2f}  =  ${item["total"]:10.2f}')
+    lines += [
+        '',
+        '=' * 60,
+        f'TOTAL CLAIM ESTIMATE:     ${claim["total_estimate"]:,.2f}',
+        f'Less Deductible:          ${claim["deductible"]:,.2f}',
+        f'NET CLAIM AMOUNT:         ${max(0, claim["total_estimate"] - claim["deductible"]):,.2f}',
+        '=' * 60,
+        '',
+        'CERTIFICATION',
+        '-' * 40,
+        'The insured hereby certifies that the above information is true and',
+        'accurate to the best of their knowledge and belief, and that this Proof',
+        'of Loss is submitted pursuant to the Standard Flood Insurance Policy.',
+        '',
+        f'Insured Signature:        _________________________ Date: __________',
+        f'Printed Name:             {claim["client_name"]}',
+        '',
+        f'Adjuster Name:            {claim["adjuster_name"] or "_________________________"}',
+        f'Adjuster Signature:       _________________________ Date: __________',
+        f'Flood Control Number:     _________________________',
+        '',
+        '--- Generated by FloodClaim Pro ---',
+    ]
+    return '\n'.join(lines)
+
+
+def _build_building_worksheet_text(claim, room_data):
+    """Generate NFIP-style Building Property Worksheet."""
+    now = datetime.datetime.now().strftime('%B %d, %Y')
+    lines = [
+        'NFIP BUILDING PROPERTY WORKSHEET',
+        '=' * 60,
+        f'Claim Number:     {claim["claim_number"]}',
+        f'Policy Number:    {claim["policy_number"] or "_________________________"}',
+        f'Insured:          {claim["client_name"]}',
+        f'Property:         {claim["property_address"]}',
+        f'Date of Loss:     {claim["flood_date"]}',
+        f'Prepared:         {now}',
+        f'Adjuster:         {claim["adjuster_name"] or "_________________________"}',
+        '',
+        'BUILDING CHARACTERISTICS',
+        '-' * 40,
+        f'Type:             {claim["property_type"] or "_________________________"}',
+        f'Year Built:       {claim["year_built"] or "_________________________"}',
+        f'Square Footage:   {claim["property_sqft"] or "_________________________"} sq ft',
+        f'Floors:           {claim["num_floors"] or "_________________________"}',
+        f'Flood Zone:       {claim["flood_zone"] or "_________________________"}',
+        f'FIRM Panel:       {claim["fema_map_number"] or "_________________________"}',
+        '',
+        'WATER/DAMAGE DETAILS',
+        '-' * 40,
+        f'Water Source:     {claim["flood_source"] or "Flood"}',
+        f'Water Category:   Category {claim["water_category"] or "3"}',
+        f'Water Class:      Class {claim["water_class"] or "_"}',
+        f'Depth (in):       {claim["water_depth_in"] or "_"}',
+        f'Date Removed:     {claim["date_water_removed"] or "_________________________"}',
+        '',
+        'ROOM-BY-ROOM DAMAGE',
+        '-' * 40,
+    ]
+    for rd in room_data:
+        room  = rd['room']
+        items = rd['line_items']
+        lines.append(f'\nRoom: {room["name"]}  (Subtotal: ${room["subtotal"]:,.2f})')
+        lines.append(f'  {"Description":<42} {"Qty":>6} {"Unit":<8} {"Unit $":>9} {"Total":>10}')
+        lines.append('  ' + '-' * 78)
+        for item in items:
+            lines.append(f'  {item["description"]:<42} {item["quantity"]:>6} '
+                         f'{item["unit"]:<8} {item["unit_cost"]:>9.2f} {item["total"]:>10.2f}')
+    lines += [
+        '',
+        '=' * 60,
+        f'TOTAL BUILDING ESTIMATE:  ${claim["total_estimate"]:,.2f}',
+        '=' * 60,
+    ]
+    return '\n'.join(lines)
+
+
+def _build_xactimate_esx(claim, rooms_data):
+    """Build Xactimate-compatible ESX (XML) content."""
+    now = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<XactimateEstimate version="1.0" xmlns="http://www.xactware.com/xactimate">',
+        '  <Header>',
+        f'    <FileType>ESX</FileType>',
+        f'    <CreatedBy>FloodClaim Pro</CreatedBy>',
+        f'    <ExportDate>{now}</ExportDate>',
+        '  </Header>',
+        '  <ClaimInfo>',
+        f'    <ClaimNumber>{claim["claim_number"]}</ClaimNumber>',
+        f'    <TypeOfLoss>Flood</TypeOfLoss>',
+        f'    <DateOfLoss>{claim["flood_date"]}</DateOfLoss>',
+        f'    <InsuredName>{claim["client_name"]}</InsuredName>',
+        f'    <InsuredPhone>{claim["client_phone"] or ""}</InsuredPhone>',
+        f'    <InsuredEmail>{claim["client_email"] or ""}</InsuredEmail>',
+        f'    <LossAddress>{claim["property_address"]}</LossAddress>',
+        f'    <InsuranceCompany>{claim["insurance_company"] or ""}</InsuranceCompany>',
+        f'    <PolicyNumber>{claim["policy_number"] or ""}</PolicyNumber>',
+        f'    <PolicyType>{claim["policy_type"] or ""}</PolicyType>',
+        f'    <CoverageBuilding>{claim["coverage_building"]:.2f}</CoverageBuilding>',
+        f'    <CoverageContents>{claim["coverage_contents"]:.2f}</CoverageContents>',
+        f'    <Deductible>{claim["deductible"]:.2f}</Deductible>',
+        f'    <FloodZone>{claim["flood_zone"] or ""}</FloodZone>',
+        f'    <FIRMPanelNumber>{claim["fema_map_number"] or ""}</FIRMPanelNumber>',
+        f'    <WaterCategory>{claim["water_category"] or ""}</WaterCategory>',
+        f'    <WaterClass>{claim["water_class"] or ""}</WaterClass>',
+        f'    <WaterDepthInches>{claim["water_depth_in"] or ""}</WaterDepthInches>',
+        f'    <MortgageCompany>{claim["mortgage_company"] or ""}</MortgageCompany>',
+        f'    <MortgageLoanNumber>{claim["mortgage_loan_number"] or ""}</MortgageLoanNumber>',
+        f'    <AdjusterName>{claim["adjuster_name"] or ""}</AdjusterName>',
+        f'    <TotalEstimate>{claim["total_estimate"]:.2f}</TotalEstimate>',
+        '  </ClaimInfo>',
+        '  <Rooms>',
+    ]
+    for rd in rooms_data:
+        room  = rd['room']
+        items = rd['line_items']
+        lines += [
+            '    <Room>',
+            f'      <Name>{room["name"]}</Name>',
+            f'      <Description>{room["description"] or ""}</Description>',
+            f'      <Subtotal>{room["subtotal"]:.2f}</Subtotal>',
+            '      <LineItems>',
+        ]
+        for item in items:
+            lines += [
+                '        <LineItem>',
+                f'          <Description>{item["description"]}</Description>',
+                f'          <Quantity>{item["quantity"]}</Quantity>',
+                f'          <Unit>{item["unit"]}</Unit>',
+                f'          <UnitCost>{item["unit_cost"]:.2f}</UnitCost>',
+                f'          <Total>{item["total"]:.2f}</Total>',
+                '        </LineItem>',
+            ]
+        lines += ['      </LineItems>', '    </Room>']
+    lines += ['  </Rooms>', '</XactimateEstimate>']
+    return '\n'.join(lines)
+
+
+def _build_photo_manifest(claim, room_data, unassigned):
+    """Build a plain-text photo manifest listing all photos and their rooms."""
+    lines = [
+        f'PHOTO MANIFEST',
+        f'Claim: {claim["claim_number"]} — {claim["client_name"]}',
+        f'Property: {claim["property_address"]}',
+        f'Generated: {datetime.datetime.now().strftime("%B %d, %Y %I:%M %p")}',
+        '=' * 60, ''
+    ]
+    total = 0
+    for rd in room_data:
+        photos = rd.get('room_photos', [])
+        if photos:
+            lines.append(f'Room: {rd["room"]["name"]} ({len(photos)} photos)')
+            for p in photos:
+                lines.append(f'  - {p["filename"]}  |  {p["caption"] or "No caption"}')
+                if p['ai_description']:
+                    lines.append(f'    AI: {p["ai_description"][:120]}')
+            total += len(photos)
+    if unassigned:
+        lines.append(f'Unassigned Photos ({len(unassigned)})')
+        for p in unassigned:
+            lines.append(f'  - {p["filename"]}  |  {p["caption"] or "No caption"}')
+        total += len(unassigned)
+    lines += ['', '=' * 60, f'Total Photos: {total}']
+    return '\n'.join(lines)
+
+
+@app.route('/claims/<int:claim_id>/submit')
+@login_required
+def submit_package_page(claim_id):
+    """Show the Submit Package page for a claim."""
+    db    = get_db()
+    claim = db.execute('''SELECT c.*, u.name as adjuster_name, u.email as adjuster_email
+        FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''', (claim_id,)).fetchone()
+    if not claim:
+        flash('Claim not found.', 'error')
+        return redirect(url_for('dashboard'))
+    rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    room_data = []
+    photo_count = 0
+    for room in rooms:
+        items  = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
+        photos = db.execute('SELECT * FROM photos WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
+        room_data.append({'room': room, 'line_items': items, 'room_photos': photos})
+        photo_count += len(photos)
+    unassigned = db.execute('SELECT * FROM photos WHERE claim_id=? AND room_id IS NULL', (claim_id,)).fetchall()
+    photo_count += len(unassigned)
+    recalc_claim(claim_id)
+    claim = db.execute('''SELECT c.*, u.name as adjuster_name, u.email as adjuster_email
+        FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''', (claim_id,)).fetchone()
+
+    # Compliance score
+    photos_all = db.execute('SELECT id FROM photos WHERE claim_id=?', (claim_id,)).fetchall()
+    checks = {
+        'policy':       bool(claim['policy_number']),
+        'flood_zone':   bool(claim['flood_zone'] and claim['flood_zone'] != 'Unknown'),
+        'photos':       len(photos_all) >= 3,
+        'rooms':        len(rooms) >= 1,
+        'estimate':     bool(claim['total_estimate']),
+        'flood_date':   bool(claim['flood_date']),
+        'water_cat':    bool(claim['water_category']),
+        'insurance':    bool(claim['insurance_company']),
+    }
+    compliance_pct = round(sum(checks.values()) / len(checks) * 100)
+
+    CARRIERS = [
+        {'id': 'generic',     'name': 'Generic / Any Carrier',     'icon': '📦', 'desc': 'ZIP with all documents + photos'},
+        {'id': 'wright',      'name': 'Wright Flood',               'icon': '🏗️', 'desc': 'Wright Flood adjuster package format'},
+        {'id': 'nfip_direct', 'name': 'NFIP Direct (FEMA)',         'icon': '🏙️', 'desc': 'NFIP Direct claim submission package'},
+        {'id': 'allstate',    'name': 'Allstate',                   'icon': '🛡️', 'desc': 'Allstate adjuster submission package'},
+        {'id': 'statefarm',   'name': 'State Farm',                 'icon': '🧱', 'desc': 'State Farm flood claim package'},
+        {'id': 'assurant',    'name': 'Assurant',                   'icon': '📊', 'desc': 'Assurant flood claim package'},
+        {'id': 'nationwide',  'name': 'Nationwide',                 'icon': '🏦', 'desc': 'Nationwide flood claim package'},
+        {'id': 'xactanalysis','name': 'XactAnalysis (Xactimate)',   'icon': '📝', 'desc': 'ESX estimate + supporting docs for XactAnalysis'},
+    ]
+    # 60-day Proof of Loss deadline
+    flood_date_deadline = None
+    if claim['flood_date']:
+        try:
+            dl = datetime.datetime.strptime(claim['flood_date'], '%Y-%m-%d') + datetime.timedelta(days=60)
+            flood_date_deadline = dl.strftime('%B %d, %Y')
+        except Exception:
+            pass
+
+    return render_template('submit_package.html', claim=claim, room_data=room_data,
+                           unassigned=unassigned, photo_count=photo_count,
+                           compliance_pct=compliance_pct, checks=checks,
+                           carriers=CARRIERS, flood_date_deadline=flood_date_deadline)
+
+
+@app.route('/claims/<int:claim_id>/submit/download', methods=['POST'])
+@login_required
+@csrf_required
+def submit_package_download(claim_id):
+    """Generate and download the submission ZIP package."""
+    db      = get_db()
+    carrier = request.form.get('carrier', 'generic')
+    include_photos = request.form.get('include_photos', 'yes') == 'yes'
+
+    claim = db.execute('''SELECT c.*, u.name as adjuster_name, u.email as adjuster_email
+        FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''', (claim_id,)).fetchone()
+    if not claim:
+        flash('Claim not found.', 'error')
+        return redirect(url_for('dashboard'))
+    rooms = db.execute('SELECT * FROM rooms WHERE claim_id=? ORDER BY id', (claim_id,)).fetchall()
+    room_data = []
+    for room in rooms:
+        items  = db.execute('SELECT * FROM line_items WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
+        photos = db.execute('SELECT * FROM photos WHERE room_id=? ORDER BY id', (room['id'],)).fetchall()
+        room_data.append({'room': room, 'line_items': items, 'room_photos': photos})
+    unassigned = db.execute('SELECT * FROM photos WHERE claim_id=? AND room_id IS NULL', (claim_id,)).fetchall()
+    recalc_claim(claim_id)
+    claim = db.execute('''SELECT c.*, u.name as adjuster_name, u.email as adjuster_email
+        FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''', (claim_id,)).fetchone()
+
+    cn = claim['claim_number']
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+
+        # 1. Proof of Loss
+        pol_text = _build_proof_of_loss_text(claim, rooms, room_data)
+        zf.writestr(f'{cn}/01_Proof_of_Loss_{cn}.txt', pol_text)
+
+        # 2. Building Worksheet
+        bw_text = _build_building_worksheet_text(claim, room_data)
+        zf.writestr(f'{cn}/02_Building_Worksheet_{cn}.txt', bw_text)
+
+        # 3. Xactimate ESX estimate
+        esx_content = _build_xactimate_esx(claim, room_data)
+        zf.writestr(f'{cn}/03_Estimate_{cn}.esx', esx_content)
+
+        # 4. Photo manifest
+        manifest = _build_photo_manifest(claim, room_data, unassigned)
+        zf.writestr(f'{cn}/04_Photo_Manifest_{cn}.txt', manifest)
+
+        # 5. Claim summary JSON (for portal APIs)
+        summary = {
+            'claim_number':      claim['claim_number'],
+            'client_name':       claim['client_name'],
+            'client_phone':      claim['client_phone'],
+            'client_email':      claim['client_email'],
+            'property_address':  claim['property_address'],
+            'flood_date':        claim['flood_date'],
+            'flood_source':      claim['flood_source'],
+            'water_category':    claim['water_category'],
+            'water_class':       claim['water_class'],
+            'water_depth_in':    claim['water_depth_in'],
+            'insurance_company': claim['insurance_company'],
+            'policy_number':     claim['policy_number'],
+            'policy_type':       claim['policy_type'],
+            'coverage_building': claim['coverage_building'],
+            'coverage_contents': claim['coverage_contents'],
+            'deductible':        claim['deductible'],
+            'flood_zone':        claim['flood_zone'],
+            'fema_map_number':   claim['fema_map_number'],
+            'total_estimate':    claim['total_estimate'],
+            'net_claim':         max(0, claim['total_estimate'] - claim['deductible']),
+            'adjuster_name':     claim['adjuster_name'],
+            'adjuster_email':    claim['adjuster_email'],
+            'status':            claim['status'],
+            'generated':         datetime.datetime.now().isoformat(),
+            'carrier_format':    carrier,
+            'rooms': [
+                {
+                    'name':     rd['room']['name'],
+                    'subtotal': rd['room']['subtotal'],
+                    'items': [
+                        {'description': i['description'], 'quantity': i['quantity'],
+                         'unit': i['unit'], 'unit_cost': i['unit_cost'], 'total': i['total']}
+                        for i in rd['line_items']
+                    ]
+                } for rd in room_data
+            ]
+        }
+        zf.writestr(f'{cn}/05_Claim_Summary_{cn}.json', json.dumps(summary, indent=2))
+
+        # 6. README with carrier-specific instructions
+        carrier_instructions = {
+            'generic':      'Upload to your carrier\'s adjuster portal. Include all files.',
+            'wright':       'Upload to Wright Flood adjuster portal at wrightflood.com/claims\n'
+                            'Required: Proof of Loss, ESX estimate, all photos.\n'
+                            'Submit within 60 days of date of loss.',
+            'nfip_direct':  'Submit to NFIP Direct via the FEMA adjuster portal.\n'
+                            'Email: FEMA-NFIPFROMailbox@fema.dhs.gov\n'
+                            'Required: Signed Proof of Loss, Building Worksheet, photos, ESX.',
+            'allstate':     'Upload via Allstate Business Insurance adjuster portal.\n'
+                            'Required: ESX estimate, Proof of Loss, photos.',
+            'statefarm':    'Submit via State Farm Claims portal or email to your assigned examiner.\n'
+                            'Required: ESX estimate, signed Proof of Loss, all damage photos.',
+            'assurant':     'Submit via Assurant adjuster portal at assurant.com/claims\n'
+                            'Required: ESX estimate, Proof of Loss, Building Worksheet, photos.',
+            'nationwide':   'Submit via Nationwide adjuster portal.\n'
+                            'Required: Signed Proof of Loss, ESX estimate, photos.',
+            'xactanalysis': 'Upload your ESX file directly to XactAnalysis at xactanalysis.com\n'
+                            'File: 03_Estimate_{cn}.esx\n'
+                            'Attach remaining documents as supporting files in XactAnalysis.',
+        }
+        readme = f'''FLOODCLAIM PRO — SUBMISSION PACKAGE
+{'=' * 60}
+Claim:    {cn}
+Client:   {claim['client_name']}
+Property: {claim['property_address']}
+Carrier:  {carrier.upper()}
+Generated: {datetime.datetime.now().strftime('%B %d, %Y %I:%M %p')}
+
+FILES IN THIS PACKAGE
+{'-' * 40}
+01_Proof_of_Loss_{cn}.txt         — Signed Proof of Loss (print + sign)
+02_Building_Worksheet_{cn}.txt    — NFIP Building Property Worksheet
+03_Estimate_{cn}.esx              — Xactimate-compatible estimate
+04_Photo_Manifest_{cn}.txt        — Photo index with AI descriptions
+05_Claim_Summary_{cn}.json        — Machine-readable claim data
+Photos/                           — All damage photos organized by room
+
+SUBMISSION INSTRUCTIONS
+{'-' * 40}
+{carrier_instructions.get(carrier, carrier_instructions['generic'])}
+
+IMPORTANT DEADLINES
+{'-' * 40}
+• File Proof of Loss within 60 days of date of loss ({claim['flood_date']})
+• Deadline: {(datetime.datetime.strptime(claim['flood_date'], '%Y-%m-%d') + datetime.timedelta(days=60)).strftime('%B %d, %Y') if claim['flood_date'] else 'Check policy'}
+• Keep copies of all submitted documents
+• Note your claim number: {cn}
+
+Generated by FloodClaim Pro — Professional Flood Damage Assessment
+'''
+        zf.writestr(f'{cn}/README_{carrier.upper()}.txt', readme)
+
+        # 7. Photos (organized by room folder)
+        if include_photos:
+            for rd in room_data:
+                room_name = rd['room']['name'].replace('/', '-').replace(' ', '_')
+                for photo in rd['room_photos']:
+                    path = os.path.join(UPLOAD_DIR, photo['filename'])
+                    if os.path.exists(path):
+                        zf.write(path, f'{cn}/Photos/{room_name}/{photo["filename"]}')
+            for photo in unassigned:
+                path = os.path.join(UPLOAD_DIR, photo['filename'])
+                if os.path.exists(path):
+                    zf.write(path, f'{cn}/Photos/General/{photo["filename"]}')
+
+    buf.seek(0)
+    _log_activity(claim_id, f'Submission package downloaded (carrier: {carrier})')
+    resp = make_response(buf.read())
+    resp.headers['Content-Type']        = 'application/zip'
+    resp.headers['Content-Disposition'] = f'attachment; filename="{cn}-{carrier}-submission.zip"'
+    return resp
 
 
 @app.route('/health')

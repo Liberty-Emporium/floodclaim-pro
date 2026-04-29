@@ -1,0 +1,312 @@
+{% extends 'base.html' %}
+{% block title %}Submit Package — {{ claim.claim_number }}{% endblock %}
+{% block page_title %}📤 Submit to Carrier{% endblock %}
+
+{% block extra_css %}
+<style>
+  .submit-layout {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 1.5rem;
+    align-items: start;
+  }
+  @media (max-width: 860px) { .submit-layout { grid-template-columns: 1fr; } }
+
+  /* Carrier cards */
+  .carrier-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: .75rem;
+    margin-top: .75rem;
+  }
+  @media (max-width: 500px) { .carrier-grid { grid-template-columns: 1fr; } }
+
+  .carrier-opt { display: none; }
+  .carrier-card {
+    display: flex; align-items: center; gap: .75rem;
+    border: 2px solid var(--border);
+    border-radius: 12px; padding: .85rem 1rem;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    user-select: none;
+  }
+  .carrier-opt:checked + .carrier-card {
+    border-color: var(--teal);
+    background: rgba(6,214,199,.07);
+  }
+  .carrier-card:hover { border-color: rgba(6,214,199,.35); background: rgba(6,214,199,.04); }
+  .carrier-icon { font-size: 1.4rem; flex-shrink: 0; }
+  .carrier-name { font-size: .85rem; font-weight: 700; color: var(--t-primary); line-height: 1.2; }
+  .carrier-desc { font-size: .7rem; color: var(--t-secondary); margin-top: .1rem; }
+
+  /* Readiness checklist */
+  .ready-item {
+    display: flex; align-items: center; gap: .75rem;
+    padding: .6rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: .85rem;
+  }
+  .ready-item:last-child { border-bottom: none; }
+  .ready-dot {
+    width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .72rem; font-weight: 800;
+  }
+  .dot-ok   { background: rgba(52,211,153,.15); color: var(--green); }
+  .dot-warn { background: rgba(248,113,113,.12); color: var(--red); }
+
+  /* Package contents */
+  .pkg-file {
+    display: flex; align-items: center; gap: .75rem;
+    padding: .65rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: .82rem;
+  }
+  .pkg-file:last-child { border-bottom: none; }
+  .pkg-icon { font-size: 1rem; flex-shrink: 0; width: 24px; text-align: center; }
+  .pkg-name { font-weight: 600; color: var(--t-primary); }
+  .pkg-desc { font-size: .72rem; color: var(--t-secondary); margin-top: .1rem; }
+
+  /* Deadline bar */
+  .deadline-bar {
+    background: rgba(248,113,113,.07);
+    border: 1px solid rgba(248,113,113,.2);
+    border-radius: 10px; padding: .85rem 1rem;
+    font-size: .82rem; color: var(--red);
+    display: flex; align-items: center; gap: .65rem;
+    margin-bottom: 1rem;
+  }
+
+  .score-mini {
+    display: flex; align-items: center; gap: .75rem;
+    padding: .85rem 1rem;
+    background: rgba(6,214,199,.05);
+    border: 1px solid rgba(6,214,199,.15);
+    border-radius: 10px; margin-bottom: 1rem;
+  }
+  .score-num {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.8rem; font-weight: 800;
+    line-height: 1;
+  }
+  .score-num.good  { color: #34D399; }
+  .score-num.ok    { color: #FBBF24; }
+  .score-num.bad   { color: #F87171; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Header -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem">
+  <div>
+    <div style="font-weight:800;font-size:1.05rem">{{ claim.client_name }}</div>
+    <div style="font-size:.85rem;color:var(--t-secondary)">{{ claim.claim_number }} · {{ claim.property_address }}</div>
+  </div>
+  <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+    <a href="{{ url_for('claim_detail', claim_id=claim.id) }}" class="btn btn-ghost btn-sm">← Back to Claim</a>
+    <a href="{{ url_for('compliance', claim_id=claim.id) }}" class="btn btn-amber btn-sm">✅ NFIP Check</a>
+    <a href="{{ url_for('report', claim_id=claim.id) }}" class="btn btn-cyan btn-sm" target="_blank">📄 Preview Report</a>
+  </div>
+</div>
+
+<div class="submit-layout">
+
+  <!-- LEFT: Carrier picker + download form -->
+  <div>
+
+    <!-- 60-day deadline warning -->
+    {% if claim.flood_date %}
+    {% set flood_ts = claim.flood_date %}
+    <div class="deadline-bar">
+      ⏰ <strong>Proof of Loss deadline:</strong>
+      File within 60 days of flood date ({{ flood_date_deadline if flood_date_deadline else 'check policy' }}).
+      Missing this = claim denial.
+    </div>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('submit_package_download', claim_id=claim.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <!-- Carrier selection -->
+      <div class="card" style="margin-bottom:1.25rem">
+        <div class="card-header">
+          <div class="card-title">🏢 Select Carrier / Platform</div>
+        </div>
+        <div style="font-size:.82rem;color:var(--t-secondary);margin-bottom:.75rem">
+          Choose where you're submitting. We'll format the package and include the right instructions.
+        </div>
+        <div class="carrier-grid">
+          {% for c in carriers %}
+          <label style="display:contents">
+            <input class="carrier-opt" type="radio" name="carrier" value="{{ c.id }}"
+                   {% if loop.first %}checked{% endif %}>
+            <div class="carrier-card">
+              <span class="carrier-icon">{{ c.icon }}</span>
+              <div>
+                <div class="carrier-name">{{ c.name }}</div>
+                <div class="carrier-desc">{{ c.desc }}</div>
+              </div>
+            </div>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Options -->
+      <div class="card" style="margin-bottom:1.25rem">
+        <div class="card-header"><div class="card-title">⚙️ Package Options</div></div>
+        <div style="display:flex;flex-direction:column;gap:.85rem">
+          <label style="display:flex;align-items:center;gap:.75rem;cursor:pointer;font-size:.88rem">
+            <input type="checkbox" name="include_photos" value="yes" checked
+                   style="accent-color:var(--teal);width:16px;height:16px">
+            <div>
+              <div style="font-weight:600;color:var(--t-primary)">Include damage photos</div>
+              <div style="font-size:.75rem;color:var(--t-secondary)">
+                {{ photo_count }} photo{{ 's' if photo_count != 1 }} · organized by room folder
+              </div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Download button -->
+      <button type="submit" class="btn btn-primary" style="width:100%;font-size:1rem;padding:.9rem">
+        📦 Download Submission Package
+      </button>
+      <div style="text-align:center;font-size:.75rem;color:var(--t-muted);margin-top:.6rem">
+        Downloads as a .ZIP file · includes all required documents
+      </div>
+    </form>
+
+    <!-- What's included -->
+    <div class="card" style="margin-top:1.25rem">
+      <div class="card-header"><div class="card-title">📁 What's in the Package</div></div>
+      <div class="pkg-file">
+        <span class="pkg-icon">📋</span>
+        <div><div class="pkg-name">Proof of Loss</div><div class="pkg-desc">Pre-filled with all claim data · print, sign & submit</div></div>
+      </div>
+      <div class="pkg-file">
+        <span class="pkg-icon">🏗️</span>
+        <div><div class="pkg-name">Building Property Worksheet</div><div class="pkg-desc">NFIP-style room-by-room damage breakdown</div></div>
+      </div>
+      <div class="pkg-file">
+        <span class="pkg-icon">📝</span>
+        <div><div class="pkg-name">Xactimate ESX Estimate</div><div class="pkg-desc">.ESX format · upload directly to XactAnalysis</div></div>
+      </div>
+      <div class="pkg-file">
+        <span class="pkg-icon">📸</span>
+        <div><div class="pkg-name">Photo Manifest</div><div class="pkg-desc">Full list of photos with AI descriptions per room</div></div>
+      </div>
+      <div class="pkg-file">
+        <span class="pkg-icon">🗂️</span>
+        <div><div class="pkg-name">Claim Summary JSON</div><div class="pkg-desc">Machine-readable data · for portal API uploads</div></div>
+      </div>
+      <div class="pkg-file">
+        <span class="pkg-icon">📖</span>
+        <div><div class="pkg-name">README + Submission Instructions</div><div class="pkg-desc">Carrier-specific steps, portal URLs, deadlines</div></div>
+      </div>
+      {% if photo_count > 0 %}
+      <div class="pkg-file">
+        <span class="pkg-icon">🖼️</span>
+        <div><div class="pkg-name">{{ photo_count }} Damage Photo{{ 's' if photo_count != 1 }}</div><div class="pkg-desc">Organized in folders by room</div></div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- RIGHT: Readiness check + claim summary -->
+  <div>
+
+    <!-- Compliance mini score -->
+    <div class="card" style="margin-bottom:1.25rem">
+      <div class="card-header"><div class="card-title">📊 Submission Readiness</div></div>
+      <div class="score-mini">
+        <div class="score-num {% if compliance_pct >= 80 %}good{% elif compliance_pct >= 50 %}ok{% else %}bad{% endif %}">{{ compliance_pct }}%</div>
+        <div>
+          <div style="font-weight:700;font-size:.9rem;color:var(--t-primary)">
+            {% if compliance_pct >= 90 %}Ready to Submit 🏆
+            {% elif compliance_pct >= 70 %}Almost Ready ✅
+            {% elif compliance_pct >= 50 %}Needs Attention ⚠️
+            {% else %}Not Ready ❌{% endif %}
+          </div>
+          <div style="font-size:.75rem;color:var(--t-secondary);margin-top:.15rem">
+            <a href="{{ url_for('compliance', claim_id=claim.id) }}" style="color:var(--teal)">View full NFIP checklist →</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="ready-item">
+        <div class="ready-dot {{ 'dot-ok' if checks.policy else 'dot-warn' }}">{{ '✓' if checks.policy else '✗' }}</div>
+        <span>Policy number recorded</span>
+      </div>
+      <div class="ready-item">
+        <div class="ready-dot {{ 'dot-ok' if checks.insurance else 'dot-warn' }}">{{ '✓' if checks.insurance else '✗' }}</div>
+        <span>Insurance company set</span>
+      </div>
+      <div class="ready-item">
+        <div class="ready-dot {{ 'dot-ok' if checks.flood_date else 'dot-warn' }}">{{ '✓' if checks.flood_date else '✗' }}</div>
+        <span>Date of loss recorded</span>
+      </div>
+      <div class="ready-item">
+        <div class="ready-dot {{ 'dot-ok' if checks.water_cat else 'dot-warn' }}">{{ '✓' if checks.water_cat else '✗' }}</div>
+        <span>Water category assigned</span>
+      </div>
+      <div class="ready-item">
+        <div class="ready-dot {{ 'dot-ok' if checks.flood_zone else 'dot-warn' }}">{{ '✓' if checks.flood_zone else '✗' }}</div>
+        <span>FEMA flood zone lookup done</span>
+      </div>
+      <div class="ready-item">
+        <div class="ready-dot {{ 'dot-ok' if checks.rooms else 'dot-warn' }}">{{ '✓' if checks.rooms else '✗' }}</div>
+        <span>Rooms documented</span>
+      </div>
+      <div class="ready-item">
+        <div class="ready-dot {{ 'dot-ok' if checks.photos else 'dot-warn' }}">{{ '✓' if checks.photos else '✗' }}</div>
+        <span>3+ photos uploaded</span>
+      </div>
+      <div class="ready-item">
+        <div class="ready-dot {{ 'dot-ok' if checks.estimate else 'dot-warn' }}">{{ '✓' if checks.estimate else '✗' }}</div>
+        <span>Estimate generated</span>
+      </div>
+
+      {% set missing = [] %}
+      {% for k,v in checks.items() %}{% if not v %}{% set _ = missing.append(k) %}{% endif %}{% endfor %}
+      {% if missing %}
+      <div style="margin-top:.75rem;padding:.75rem;background:rgba(248,113,113,.07);border-radius:8px;font-size:.78rem;color:var(--red)">
+        ⚠️ Fix {{ missing|length }} item{{ 's' if missing|length != 1 }} before submitting for best results.
+        <a href="{{ url_for('claim_detail', claim_id=claim.id) }}" style="color:var(--red);font-weight:700"> Fill gaps →</a>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Claim summary -->
+    <div class="card">
+      <div class="card-header"><div class="card-title">📋 Claim Summary</div></div>
+      {% set rows = [
+        ('Claim #',      claim.claim_number),
+        ('Status',       claim.status),
+        ('Flood Date',   claim.flood_date),
+        ('Carrier',      claim.insurance_company or '—'),
+        ('Policy #',     claim.policy_number or '—'),
+        ('Flood Zone',   claim.flood_zone or '—'),
+        ('Water Cat',    claim.water_category or '—'),
+        ('Adjuster',     claim.adjuster_name or '—'),
+        ('Est. Value',   '${:,.2f}'.format(claim.total_estimate)),
+        ('Deductible',   '${:,.2f}'.format(claim.deductible)),
+        ('Net Claim',    '${:,.2f}'.format(claim.total_estimate - claim.deductible if claim.total_estimate > claim.deductible else 0)),
+      ] %}
+      {% for label, val in rows %}
+      <div style="display:flex;justify-content:space-between;align-items:center;
+                  padding:.55rem 0;border-bottom:1px solid var(--border);font-size:.82rem">
+        <span style="color:var(--t-secondary);font-weight:600">{{ label }}</span>
+        <span style="color:var(--t-primary);font-weight:{% if label in ['Est. Value','Net Claim'] %}800{% else %}500{% endif %};
+              color:{% if label == 'Net Claim' %}var(--green){% elif label == 'Est. Value' %}var(--teal){% else %}var(--t-primary){% endif %}">
+          {{ val }}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+
+  </div>
+</div>
+{% endblock %}
