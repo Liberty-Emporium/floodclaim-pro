@@ -481,6 +481,105 @@
   .mob-nav-toggle:hover { background: rgba(255,255,255,0.07); color: var(--t-primary); }
   .mob-nav-toggle svg { width: 22px; height: 22px; }
 
+  /* Help button */
+  .help-btn {
+    display: inline-flex; align-items: center; gap: .4rem;
+    background: rgba(6,214,199,.1); border: 1px solid rgba(6,214,199,.25);
+    color: var(--teal); border-radius: 999px;
+    padding: .3rem .85rem; font-size: .78rem; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+    transition: background .15s, box-shadow .15s;
+  }
+  .help-btn:hover { background: rgba(6,214,199,.18); box-shadow: 0 0 12px rgba(6,214,199,.25); }
+
+  /* Help drawer */
+  .help-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.55); z-index: 200;
+    backdrop-filter: blur(4px);
+  }
+  .help-overlay.open { display: block; }
+  .help-drawer {
+    position: fixed; top: 0; right: -480px; width: 460px; max-width: 96vw;
+    height: 100vh; background: var(--surface);
+    border-left: 1px solid var(--border);
+    z-index: 201; display: flex; flex-direction: column;
+    transition: right .3s cubic-bezier(.4,0,.2,1);
+    box-shadow: -8px 0 40px rgba(0,0,0,.4);
+  }
+  .help-drawer.open { right: 0; }
+  .help-drawer-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(135deg, rgba(6,214,199,.08), rgba(59,123,255,.06));
+    flex-shrink: 0;
+  }
+  .help-drawer-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1rem; font-weight: 800; color: var(--t-primary);
+    display: flex; align-items: center; gap: .6rem;
+  }
+  .help-close-btn {
+    background: rgba(255,255,255,.07); border: none;
+    color: var(--t-secondary); cursor: pointer;
+    width: 30px; height: 30px; border-radius: 50%;
+    font-size: 1rem; display: flex; align-items: center; justify-content: center;
+    transition: background .15s, color .15s;
+  }
+  .help-close-btn:hover { background: rgba(248,113,113,.2); color: var(--red); }
+  .help-body { flex: 1; overflow-y: auto; padding: 1.5rem; }
+  .help-body::-webkit-scrollbar { width: 4px; }
+  .help-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Help content styles */
+  .help-section { margin-bottom: 1.5rem; }
+  .help-section-title {
+    font-size: .65rem; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .1em;
+    color: var(--teal); margin-bottom: .75rem;
+    display: flex; align-items: center; gap: .5rem;
+  }
+  .help-section-title::after { content:''; flex:1; height:1px; background: rgba(6,214,199,.15); }
+  .help-step {
+    display: flex; gap: .85rem; align-items: flex-start;
+    margin-bottom: .85rem;
+  }
+  .help-step-num {
+    width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+    background: var(--grad); color: #fff;
+    font-size: .72rem; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .help-step-body { flex: 1; }
+  .help-step-body strong { font-size: .88rem; color: var(--t-primary); display: block; margin-bottom: .2rem; }
+  .help-step-body p { font-size: .8rem; color: var(--t-secondary); line-height: 1.6; margin: 0; }
+  .help-tip {
+    background: rgba(6,214,199,.07); border: 1px solid rgba(6,214,199,.15);
+    border-radius: 10px; padding: .75rem 1rem;
+    font-size: .8rem; color: var(--t-secondary); line-height: 1.6;
+    margin-bottom: 1rem;
+  }
+  .help-tip strong { color: var(--teal); }
+  .help-warning {
+    background: rgba(248,113,113,.07); border: 1px solid rgba(248,113,113,.15);
+    border-radius: 10px; padding: .75rem 1rem;
+    font-size: .8rem; color: var(--red); line-height: 1.6;
+    margin-bottom: 1rem;
+  }
+  .help-tag {
+    display: inline-block;
+    background: rgba(59,123,255,.1); color: var(--blue);
+    border-radius: 6px; padding: .1rem .5rem;
+    font-size: .72rem; font-weight: 700; margin: .1rem;
+  }
+  .help-footer {
+    border-top: 1px solid var(--border); padding: 1rem 1.5rem;
+    flex-shrink: 0;
+    display: flex; align-items: center; gap: .75rem;
+    font-size: .78rem; color: var(--t-muted);
+  }
+
   .sidebar-overlay {
     display: none; position: fixed; inset: 0;
     background: rgba(0,0,0,0.65);
@@ -622,6 +721,10 @@
       <div class="topbar-title">{% block page_title %}{% endblock %}</div>
     </div>
     <div class="topbar-right">
+      <button class="help-btn" onclick="openHelp()" title="How to use this page">
+        <i data-lucide="help-circle" style="width:16px;height:16px"></i>
+        <span>Help</span>
+      </button>
       <div class="topbar-user">
         <div class="topbar-avatar">{{ (session.name or session.email or 'U')[0].upper() }}</div>
         <span>{{ session.email }}</span>
@@ -740,5 +843,319 @@
     });
   }, 6000);
 </script>
-</body>
-</html>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- HELP DRAWER                                              -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="help-overlay" id="helpOverlay" onclick="closeHelp()"></div>
+<aside class="help-drawer" id="helpDrawer">
+  <div class="help-drawer-header">
+    <div class="help-drawer-title">
+      <i data-lucide="help-circle" style="width:18px;height:18px;color:var(--teal)"></i>
+      <span id="help-page-title">How to use this page</span>
+    </div>
+    <button class="help-close-btn" onclick="closeHelp()">✕</button>
+  </div>
+  <div class="help-body" id="help-body"></div>
+  <div class="help-footer">
+    💬 Need more help?
+    <a href="{{ url_for('willie') }}" style="color:var(--teal);font-weight:700;text-decoration:none">Ask Willie →</a>
+  </div>
+</aside>
+
+<script>
+// ── Help Drawer ──────────────────────────────────────────────────────────
+const HELP_CONTENT = {
+  dashboard: {
+    title: '📊 Dashboard',
+    html: `
+      <div class="help-tip"><strong>Your home base.</strong> Every claim you're assigned lives here. Check this first thing every morning.</div>
+      <div class="help-section">
+        <div class="help-section-title">What the numbers mean</div>
+        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>Stat tiles at the top</strong><p>Shows your total claims, how many are in each stage, and your total open pipeline dollar value (sum of all non-closed claim estimates).</p></div></div>
+        <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>Search bar</strong><p>Type any part of a client name, claim number (e.g. FC-2026), or property address to filter the list instantly.</p></div></div>
+        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Filters</strong><p>Narrow by Status, Adjuster, Priority, or Flood Date range. Combine multiple filters at once. Click <em>Clear</em> to reset.</p></div></div>
+        <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>Bulk actions</strong><p>Check the boxes on the left of each row, then pick an action: change status on all selected, assign to an adjuster, or delete. Great after a storm event when you get 20 new assignments at once.</p></div></div>
+        <div class="help-step"><div class="help-step-num">5</div><div class="help-step-body"><strong>View →</strong><p>Click to open the full claim and start working on it.</p></div></div>
+      </div>
+      <div class="help-tip"><strong>💡 Pro tip:</strong> Use <span class="help-tag">🗂 Pipeline View</span> for a visual Kanban board instead of the table — easier to spot what needs to move.</div>
+    `
+  },
+  new_claim: {
+    title: '➕ New Claim',
+    html: `
+      <div class="help-tip"><strong>Fill this out at the property or right after inspection.</strong> The more you fill in now, the higher your NFIP compliance score will be.</div>
+      <div class="help-section">
+        <div class="help-section-title">Required fields</div>
+        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>Client name, phone, email</strong><p>Client email enables automatic status-change notifications. Phone is used for SMS updates.</p></div></div>
+        <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>Property address</strong><p>Used for FEMA flood zone lookup. Enter the full street address including city and state.</p></div></div>
+        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Flood date</strong><p>The date the flood occurred — NOT the date you're filing. This starts the 60-day Proof of Loss clock.</p></div></div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Important fields</div>
+        <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>Water Category</strong><p><strong>Cat 1</strong> = clean water (pipe burst). <strong>Cat 2</strong> = gray water (appliance). <strong>Cat 3</strong> = black water / flood water from outside. Always Cat 3 for rising floodwater — this is required for NFIP compliance.</p></div></div>
+        <div class="help-step"><div class="help-step-num">5</div><div class="help-step-body"><strong>Water Class</strong><p><strong>Class 1</strong> = floors only. <strong>Class 2</strong> = walls wet up to 24 inches. <strong>Class 3</strong> = ceiling saturated. <strong>Class 4</strong> = hardwood/brick specialty drying needed.</p></div></div>
+        <div class="help-step"><div class="help-step-num">6</div><div class="help-step-body"><strong>Insurance &amp; policy info</strong><p>Insurance company, policy number, coverage amounts and deductible. Required for the Proof of Loss document.</p></div></div>
+        <div class="help-step"><div class="help-step-num">7</div><div class="help-step-body"><strong>Priority</strong><p>Normal / High / Urgent. Use Urgent for elderly clients, severe structural damage, or mold risk.</p></div></div>
+      </div>
+      <div class="help-warning">⏰ <strong>60-day rule:</strong> The Proof of Loss must be filed within 60 days of the flood date or the claim is automatically denied by NFIP.</div>
+    `
+  },
+  claim_detail: {
+    title: '🏠 Claim Detail',
+    html: `
+      <div class="help-tip"><strong>The main work area.</strong> Everything for one claim lives here — rooms, damage items, photos, estimate, and all actions.</div>
+      <div class="help-section">
+        <div class="help-section-title">Header buttons</div>
+        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>📤 Submit to Carrier</strong><p>Generates a complete ZIP package (Proof of Loss, ESX estimate, photos, worksheet) formatted for your carrier. Do this when the claim is ready to submit.</p></div></div>
+        <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>📄 Report</strong><p>View the formatted damage report. Use the print button to save as PDF for the client or carrier.</p></div></div>
+        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>✅ NFIP Check</strong><p>Shows your compliance score (0–100%). Run this before submitting — it tells you exactly what's missing.</p></div></div>
+        <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>📱 QR Upload</strong><p>Get a QR code the client or contractor can scan to upload photos from their phone. No login needed.</p></div></div>
+        <div class="help-step"><div class="help-step-num">5</div><div class="help-step-body"><strong>⊞ Duplicate</strong><p>Copies this claim with all rooms and line items. Useful for multiple properties in the same neighborhood.</p></div></div>
+        <div class="help-step"><div class="help-step-num">6</div><div class="help-step-body"><strong>🌊 Ask Willie</strong><p>Opens Willie AI with full context about this specific claim. Willie can add rooms, look up FEMA zones, check compliance, and more.</p></div></div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Building the scope</div>
+        <div class="help-step"><div class="help-step-num">7</div><div class="help-step-body"><strong>Add rooms</strong><p>Click <em>+ Add Room</em> and name each damaged area (Living Room, Kitchen, Master Bath, etc.). Keep room names consistent with what you'd call them in Xactimate.</p></div></div>
+        <div class="help-step"><div class="help-step-num">8</div><div class="help-step-body"><strong>Add line items</strong><p>Under each room, add damage items: description, quantity, unit (sf/lf/ea), and unit cost. The total auto-calculates. Use 2026 NFIP rates — ask Willie if unsure.</p></div></div>
+        <div class="help-step"><div class="help-step-num">9</div><div class="help-step-body"><strong>🤖 AI Estimate</strong><p>Click this button to let the AI read your photos and rooms and generate a complete scope-of-work estimate. Review it, edit anything that's wrong, then click Apply.</p></div></div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Photos</div>
+        <div class="help-step"><div class="help-step-num">10</div><div class="help-step-body"><strong>Upload photos</strong><p>Upload damage photos under the correct room. Every photo gets AI-analyzed automatically — it writes a damage description you can edit.</p></div></div>
+        <div class="help-step"><div class="help-step-num">11</div><div class="help-step-body"><strong>Delete line items or photos</strong><p>Click the ✕ or 🗑 button. If a button doesn't respond, try refreshing the page after your latest Railway deploy.</p></div></div>
+      </div>
+      <div class="help-tip"><strong>Workflow:</strong> Add rooms → add line items → upload photos → run AI Estimate → NFIP Check → Submit to Carrier.</div>
+    `
+  },
+  pipeline: {
+    title: '🗂 Pipeline',
+    html: `
+      <div class="help-tip"><strong>Visual Kanban board.</strong> See every claim as a card across 4 stages. Great for team meetings and spotting bottlenecks.</div>
+      <div class="help-section">
+        <div class="help-section-title">The 4 columns</div>
+        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>New</strong><p>Just assigned. Needs site inspection and initial documentation.</p></div></div>
+        <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>In Progress</strong><p>Inspection complete. Building rooms, adding line items, uploading photos, running estimate.</p></div></div>
+        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Submitted</strong><p>Carrier package sent. Waiting on examiner review and payment authorization.</p></div></div>
+        <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>Closed</strong><p>Claim paid out, denied, or withdrawn. No further action needed.</p></div></div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">How to use it</div>
+        <div class="help-step"><div class="help-step-num">5</div><div class="help-step-body"><strong>Drag a card</strong><p>Grab any claim card and drag it to a new column. It saves instantly and auto-emails the client about the status change.</p></div></div>
+        <div class="help-step"><div class="help-step-num">6</div><div class="help-step-body"><strong>View or check compliance</strong><p>Each card has a <em>View →</em> button and a ✅ compliance button so you can act without leaving the board.</p></div></div>
+      </div>
+      <div class="help-tip"><strong>💡 Use this during team standup</strong> — pull it up on screen, drag claims together, and everyone sees progress in real time.</div>
+    `
+  },
+  schedule: {
+    title: '📅 Schedule',
+    html: `
+      <div class="help-tip"><strong>Your inspection calendar.</strong> Book site visits tied directly to claims. Never lose track of where you need to be.</div>
+      <div class="help-section">
+        <div class="help-section-title">Scheduling an inspection</div>
+        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>Fill the form on the right</strong><p>Pick the claim from the dropdown, choose a date and time, optionally assign an adjuster, and add notes (gate codes, access instructions, etc.).</p></div></div>
+        <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>Adjuster gets notified</strong><p>When you schedule, the assigned adjuster gets an automatic email with the claim details, address, date, time, and your notes.</p></div></div>
+        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Update status</strong><p>Use the status dropdown on each inspection: Pending → Confirmed → Done → Cancelled. This helps track what's actually happened vs. what's booked.</p></div></div>
+      </div>
+      <div class="help-tip"><strong>TODAY badge</strong> highlights inspections happening today. Past inspections appear in a separate faded section below.</div>
+    `
+  },
+  notifications: {
+    title: '🔔 Notifications',
+    html: `
+      <div class="help-tip"><strong>Your communication log.</strong> Every message ever sent to a client is recorded here — automatically and manually.</div>
+      <div class="help-section">
+        <div class="help-section-title">What triggers automatically</div>
+        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>Status change</strong><p>When you move a claim to a new status (in Pipeline or on the claim detail), the client gets an email automatically if their email is on file.</p></div></div>
+        <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>Inspection scheduled</strong><p>When you book an inspection, the assigned adjuster gets an email with all the details.</p></div></div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Sending a manual update</div>
+        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Use the form on the right</strong><p>Pick any claim, type your message, and hit Send. The client receives a branded HTML email immediately.</p></div></div>
+        <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>Requires SendGrid</strong><p>Go to Settings and add a SendGrid API key (free tier works) to enable email delivery. Without it, notifications are logged but not sent.</p></div></div>
+      </div>
+      <div class="help-tip"><strong>💡 Dispute protection:</strong> This log is your paper trail. If a client says they were never notified, this page proves otherwise.</div>
+    `
+  },
+  compliance: {
+    title: '✅ NFIP Compliance',
+    html: `
+      <div class="help-warning">⏰ <strong>Run this before EVERY submission.</strong> Missing required NFIP items = carrier kicks it back or denies it.</div>
+      <div class="help-section">
+        <div class="help-section-title">Reading the score</div>
+        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>Score ring (0–100%)</strong><p>Shows how complete the claim is against 18 NFIP-required checklist items. Aim for 90%+ before submitting.</p></div></div>
+        <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>Grades</strong><p>🏆 Excellent (90%+), ✅ Good (75%+), ⚠️ Needs Work (50%+), ❌ Incomplete. Only Excellent and Good are safe to submit.</p></div></div>
+        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Missing items list</strong><p>The left panel shows exactly what's missing. Each item maps to a real NFIP requirement.</p></div></div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Common missing items</div>
+        <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>FEMA flood zone</strong><p>Click the FEMA Lookup button on the Report page or ask Willie to look it up. It auto-fills on the claim.</p></div></div>
+        <div class="help-step"><div class="help-step-num">5</div><div class="help-step-body"><strong>Water category/class</strong><p>Go back to the claim and set these in the claim info section. Flood water from outside is always Category 3.</p></div></div>
+        <div class="help-step"><div class="help-step-num">6</div><div class="help-step-body"><strong>3+ photos</strong><p>NFIP requires photographic evidence. Upload at least 3 damage photos — more is better.</p></div></div>
+      </div>
+    `
+  },
+  analytics: {
+    title: '📊 Analytics',
+    html: `
+      <div class="help-tip"><strong>Business intelligence for your operation.</strong> Use this to track performance, spot trends, and make smarter decisions.</div>
+      <div class="help-section">
+        <div class="help-section-title">The KPI tiles</div>
+        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>Open Pipeline $</strong><p>Total dollar value of all non-closed claims. This is your potential revenue still in play.</p></div></div>
+        <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>Closed Revenue $</strong><p>Sum of all closed claim estimates. Tracks what's actually been completed.</p></div></div>
+        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Avg Cycle Time</strong><p>Average days from claim creation to close. Lower is better — industry benchmark is 30–45 days for flood claims.</p></div></div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Charts</div>
+        <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>Claims by Month (bar + line)</strong><p>Bars = number of claims opened each month. Line = dollar value. Useful for spotting storm seasons and business growth.</p></div></div>
+        <div class="help-step"><div class="help-step-num">5</div><div class="help-step-body"><strong>Status Breakdown (donut)</strong><p>Visual split of where all your claims stand right now. A healthy operation has most claims in Submitted or Closed.</p></div></div>
+        <div class="help-step"><div class="help-step-num">6</div><div class="help-step-body"><strong>Top Adjusters (admin only)</strong><p>Leaderboard of adjusters by claim count and total value. Use for performance reviews and workload balancing.</p></div></div>
+      </div>
+    `
+  },
+  submit_package: {
+    title: '📤 Submit to Carrier',
+    html: `
+      <div class="help-tip"><strong>One-click package builder.</strong> Generates everything a carrier needs in a single ZIP file, formatted correctly for each platform.</div>
+      <div class="help-section">
+        <div class="help-section-title">Step by step</div>
+        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>Check Readiness first</strong><p>The panel on the right shows your submission readiness score. If it's below 75%, fix the missing items before downloading.</p></div></div>
+        <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>Select your carrier</strong><p>Pick the insurance company or platform you're submitting to. This customizes the README instructions and file naming.</p></div></div>
+        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Include photos?</strong><p>Leave checked to include all damage photos organized in room folders. Uncheck if your carrier requires photos uploaded separately.</p></div></div>
+        <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>Download the ZIP</strong><p>Opens a ZIP with 6 files: Proof of Loss, Building Worksheet, Xactimate ESX, Photo Manifest, Claim Summary JSON, and a carrier-specific README.</p></div></div>
+        <div class="help-step"><div class="help-step-num">5</div><div class="help-step-body"><strong>Print &amp; sign the Proof of Loss</strong><p>The POL.txt file is pre-filled. Print it, have the client sign it, and include it with your carrier upload. NFIP requires a signed POL within 60 days.</p></div></div>
+        <div class="help-step"><div class="help-step-num">6</div><div class="help-step-body"><strong>Upload ESX to XactAnalysis</strong><p>The .esx file uploads directly into XactAnalysis (Verisk). Log into xactanalysis.com, find the claim, and attach the file.</p></div></div>
+      </div>
+      <div class="help-warning">⏰ <strong>60-day Proof of Loss deadline</strong> is shown on this page. Missing it = automatic denial.</div>
+    `
+  },
+  willie: {
+    title: '🌊 Willie AI Assistant',
+    html: `
+      <div class="help-tip"><strong>Willie controls the entire app.</strong> You can talk to him like a person and he'll take action — no clicking required.</div>
+      <div class="help-section">
+        <div class="help-section-title">What Willie can do</div>
+        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>Create &amp; update claims</strong><p>Say "Create a new claim for John Smith at 123 Main St, flood date April 10th" and Willie does it.</p></div></div>
+        <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>Add rooms &amp; line items</strong><p>Say "Add a living room with Cat 3 drywall tear-out 400 sf" and Willie adds the room and the correctly priced line item.</p></div></div>
+        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Move claims through pipeline</strong><p>"Move Maria's claim to Submitted" — Willie updates status and emails the client.</p></div></div>
+        <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>Schedule inspections</strong><p>"Schedule an inspection for claim FC-2026-XXX on May 5th at 10am" — Willie books it and emails the adjuster.</p></div></div>
+        <div class="help-step"><div class="help-step-num">5</div><div class="help-step-body"><strong>Check compliance</strong><p>"Check NFIP compliance on Derek's claim" — Willie returns the score and lists exactly what's missing.</p></div></div>
+        <div class="help-step"><div class="help-step-num">6</div><div class="help-step-body"><strong>Answer NFIP questions</strong><p>Willie knows 2026 pricing rates, water categories, Proof of Loss rules, FEMA zones, and all NFIP procedures.</p></div></div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">Tips for best results</div>
+      </div>
+      <div class="help-tip"><strong>Be specific:</strong> Include the claim number or client name when asking about a specific claim.</div>
+      <div class="help-tip"><strong>From a claim page:</strong> Click “🌊 Ask Willie” on any claim — Willie already knows that claim’s full details and can act on it immediately.</div>
+      <div class="help-tip"><strong>Chain requests:</strong> You can ask Willie to do multiple things: “Look up the FEMA zone, check compliance, and tell me what’s missing” — he’ll do all three.</div>
+    `
+  },
+  report: {
+    title: '📄 Damage Report',
+    html: `
+      <div class="help-tip"><strong>The formatted report for clients and carriers.</strong> Print it, PDF it, or use the export buttons.</div>
+      <div class="help-section">
+        <div class="help-section-title">Buttons on this page</div>
+        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>📄 Download PDF</strong><p>Opens browser print dialog. Select "Save as PDF" as the printer. The report is formatted for professional printing on letter size paper.</p></div></div>
+        <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>📊 Xactimate Export</strong><p>Downloads the estimate as a .ESX file you can upload to XactAnalysis. Contains all rooms, line items, quantities, and unit costs.</p></div></div>
+        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>🗺️ FEMA Lookup</strong><p>Auto-looks up the FEMA flood zone for this property and saves it to the claim. Run this on every claim before submitting.</p></div></div>
+        <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>🔗 Client Portal</strong><p>Generates a unique link you can text or email to the client. They see their claim status, damage assessment, and can sign digitally — no login needed.</p></div></div>
+      </div>
+    `
+  },
+  settings: {
+    title: '⚙️ Settings',
+    html: `
+      <div class="help-tip"><strong>Wire up your integrations here.</strong> None of the automated features work until the right API keys are in place.</div>
+      <div class="help-section">
+        <div class="help-section-title">Priority setup order</div>
+        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>OpenRouter API key</strong><p>Powers AI photo analysis and AI estimates. Get a free key at openrouter.ai. Required for the core AI features.</p></div></div>
+        <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>AI Model</strong><p>Pick which model analyzes your photos. GPT-4o is most accurate. Llama 4 Scout is free. Gemini 2.5 Flash is fast and cheap.</p></div></div>
+        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Willie Key + Sync</strong><p>Paste Willie’s widget API key (from AI Agent Widget app → Willie → Edit), then click “⚡ Sync Actions to Willie”. This gives Willie his 28 superpowers.</p></div></div>
+        <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>SendGrid</strong><p>Enables automatic client emails on status changes. Free tier sends 100 emails/day. Required for notifications to work.</p></div></div>
+        <div class="help-step"><div class="help-step-num">5</div><div class="help-step-body"><strong>Twilio</strong><p>Enables SMS text messages to clients. Optional but great for urgent updates.</p></div></div>
+        <div class="help-step"><div class="help-step-num">6</div><div class="help-step-body"><strong>Stripe</strong><p>Only needed if you’re billing other adjusters or firms for using FloodClaim Pro. Not needed for personal use.</p></div></div>
+      </div>
+      <div class="help-tip"><strong>Weekly Report:</strong> Set your email address at the bottom and click Send — you’ll get a weekly summary of new claims, closures, and pipeline value.</div>
+    `
+  },
+  billing: {
+    title: '💳 Billing',
+    html: `
+      <div class="help-section">
+        <div class="help-section-title">Plans</div>
+        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>Basic — $49/mo</strong><p>Solo adjuster. Up to 25 claims/month. PDF export, Willie AI, client portal, NFIP compliance.</p></div></div>
+        <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>Pro — $99/mo</strong><p>Active adjuster. Up to 100 claims/month. Everything in Basic plus Xactimate export and Analytics.</p></div></div>
+        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Agency — $249/mo</strong><p>Adjusting firm. Unlimited claims, multi-adjuster team, white-label reports, SMS notifications.</p></div></div>
+      </div>
+      <div class="help-tip">Payments go through Stripe. Cancel anytime. To activate, first add your Stripe keys in Settings.</div>
+    `
+  },
+  team: {
+    title: '👥 Team',
+    html: `
+      <div class="help-tip"><strong>Manage your adjusters.</strong> Each team member gets their own login and only sees claims assigned to them.</div>
+      <div class="help-section">
+        <div class="help-section-title">Adding a team member</div>
+        <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>Fill the form on the right</strong><p>Enter name, email, and a temporary password. Set role to <em>adjuster</em> for field staff, <em>admin</em> for managers who need full access.</p></div></div>
+        <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>Share the login</strong><p>Send the adjuster their email and temporary password. They log in at your FloodClaim Pro URL and can change their password in Settings.</p></div></div>
+        <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Assign claims</strong><p>On the Dashboard or when creating a new claim, use the Adjuster dropdown to assign claims to specific team members.</p></div></div>
+      </div>
+      <div class="help-tip"><strong>Claims count</strong> shows how many active claims each adjuster has. Use this to balance workload evenly.</div>
+    `
+  }
+};
+
+// Route to help page key
+const PAGE_HELP_MAP = {
+  'dashboard':         'dashboard',
+  'new_claim':         'new_claim',
+  'claim_detail':      'claim_detail',
+  'pipeline':          'pipeline',
+  'schedule':          'schedule',
+  'notifications':     'notifications',
+  'compliance':        'compliance',
+  'analytics':         'analytics',
+  'submit_package_page': 'submit_package',
+  'willie':            'willie',
+  'report':            'report',
+  'settings':          'settings',
+  'billing':           'billing',
+  'team':              'team',
+};
+
+const CURRENT_ENDPOINT = '{{ request.endpoint }}';
+
+function openHelp() {
+  const key  = PAGE_HELP_MAP[CURRENT_ENDPOINT] || null;
+  const info = key ? HELP_CONTENT[key] : null;
+  const title = info ? info.title : 'FloodClaim Pro Help';
+  const html  = info ? info.html : `
+    <div class="help-tip">Select a page from the sidebar to see its specific instructions.</div>
+    <div class="help-section">
+      <div class="help-section-title">Quick start</div>
+      <div class="help-step"><div class="help-step-num">1</div><div class="help-step-body"><strong>Create a claim</strong><p>Sidebar → New Claim. Fill in client info, property address, flood date, water category.</p></div></div>
+      <div class="help-step"><div class="help-step-num">2</div><div class="help-step-body"><strong>Document damage</strong><p>Open the claim → Add rooms → Add line items → Upload photos.</p></div></div>
+      <div class="help-step"><div class="help-step-num">3</div><div class="help-step-body"><strong>Generate estimate</strong><p>Click 🤖 AI Estimate on the claim page.</p></div></div>
+      <div class="help-step"><div class="help-step-num">4</div><div class="help-step-body"><strong>Check compliance</strong><p>Click ✅ NFIP Check on the claim page.</p></div></div>
+      <div class="help-step"><div class="help-step-num">5</div><div class="help-step-body"><strong>Submit to carrier</strong><p>Click 📤 Submit to Carrier → pick carrier → download ZIP.</p></div></div>
+    </div>
+  `;
+  document.getElementById('help-page-title').textContent = title;
+  document.getElementById('help-body').innerHTML = html;
+  document.getElementById('helpDrawer').classList.add('open');
+  document.getElementById('helpOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  lucide.createIcons();
+}
+
+function closeHelp() {
+  document.getElementById('helpDrawer').classList.remove('open');
+  document.getElementById('helpOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeHelp();
+});
+</script>
