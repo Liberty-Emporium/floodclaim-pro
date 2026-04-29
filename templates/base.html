@@ -647,6 +647,55 @@
 
 <script src="https://ai-agent-widget-production.up.railway.app/widget/F5J8yYT6a6GrppjviN6p8w.js"></script>
 
+<!-- Willie bubble restyle: teal gradient + wave SVG -->
+<style>
+  #aai-bubble {
+    background: linear-gradient(135deg, #06D6C7 0%, #3B7BFF 100%) !important;
+    box-shadow: 0 4px 20px rgba(6,214,199,0.45) !important;
+    font-size: 0 !important;   /* hide emoji text */
+    border: 2px solid rgba(255,255,255,0.15) !important;
+  }
+  #aai-bubble:hover {
+    box-shadow: 0 6px 28px rgba(6,214,199,0.6) !important;
+    transform: scale(1.08) !important;
+  }
+  #aai-bubble svg.willie-wave {
+    width: 28px; height: 28px;
+    display: block;
+  }
+</style>
+<script>
+(function() {
+  function styleWillie() {
+    var bubble = document.getElementById('aai-bubble');
+    if (!bubble) return;
+    // Remove any emoji text nodes
+    bubble.childNodes.forEach(function(n) {
+      if (n.nodeType === 3) n.textContent = '';
+    });
+    // Inject wave SVG if not already done
+    if (!bubble.querySelector('svg.willie-wave')) {
+      bubble.innerHTML = '<svg class="willie-wave" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">'
+        + '<path d="M2 12 C4 8, 6 8, 8 12 S12 16, 14 12 S18 8, 20 12 S22 14, 24 12" stroke="white" stroke-width="2.2" stroke-linecap="round" fill="none"/>'
+        + '<circle cx="12" cy="5" r="1.5" fill="white" opacity="0.7"/>'
+        + '<path d="M7 19 C9 17, 11 17, 13 19 S17 21, 19 19" stroke="white" stroke-width="1.8" stroke-linecap="round" fill="none" opacity="0.6"/>'
+        + '</svg>';
+    }
+  }
+  // Try immediately + retry until widget loads
+  var tries = 0;
+  var iv = setInterval(function() {
+    styleWillie();
+    tries++;
+    if (tries > 40) clearInterval(iv);
+    if (document.getElementById('aai-bubble') && document.getElementById('aai-bubble').querySelector('svg.willie-wave')) clearInterval(iv);
+  }, 150);
+  // Also re-apply if bubble is recreated
+  var observer = new MutationObserver(function() { styleWillie(); });
+  observer.observe(document.body, { childList: true, subtree: true });
+})();
+</script>
+
 <script>
   lucide.createIcons();
 
