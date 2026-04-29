@@ -1,0 +1,260 @@
+{% extends 'base.html' %}
+{% block title %}Pipeline — FloodClaim Pro{% endblock %}
+{% block page_title %}🗂 Pipeline{% endblock %}
+
+{% block extra_css %}
+<style>
+  .board {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.25rem;
+    align-items: start;
+  }
+  @media (max-width: 900px) { .board { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 550px) { .board { grid-template-columns: 1fr; } }
+
+  .col-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: .75rem 1rem;
+    border-radius: 12px 12px 0 0;
+    font-size: .75rem; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .09em;
+    margin-bottom: 0;
+  }
+  .col-new       { background: rgba(6,214,199,.12);   color: var(--teal); }
+  .col-progress  { background: rgba(251,191,36,.12);  color: var(--amber); }
+  .col-submitted { background: rgba(59,123,255,.12);  color: var(--blue); }
+  .col-closed    { background: rgba(52,211,153,.12);  color: var(--green); }
+
+  .col-body {
+    background: rgba(255,255,255,.025);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 12px 12px;
+    min-height: 200px;
+    padding: .75rem;
+    display: flex; flex-direction: column; gap: .6rem;
+  }
+  .col-body.drag-over {
+    background: rgba(6,214,199,.06);
+    border-color: rgba(6,214,199,.3);
+  }
+
+  .claim-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: .85rem 1rem;
+    cursor: grab;
+    transition: box-shadow .15s, transform .15s, border-color .15s;
+    user-select: none;
+  }
+  .claim-card:hover {
+    box-shadow: 0 6px 20px rgba(0,0,0,.35);
+    transform: translateY(-2px);
+    border-color: rgba(6,214,199,.2);
+  }
+  .claim-card.dragging {
+    opacity: .5; cursor: grabbing;
+    box-shadow: 0 12px 32px rgba(0,0,0,.5);
+    transform: rotate(2deg);
+  }
+  .claim-card .cn {
+    font-family: monospace; font-size: .72rem; font-weight: 700;
+    color: var(--teal); margin-bottom: .25rem;
+  }
+  .claim-card .client {
+    font-weight: 700; font-size: .88rem; color: var(--t-primary);
+    margin-bottom: .2rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .claim-card .addr {
+    font-size: .75rem; color: var(--t-secondary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-bottom: .4rem;
+  }
+  .claim-card .meta {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: .72rem;
+  }
+  .claim-card .est  { font-weight: 700; color: var(--green); }
+  .claim-card .adj  { color: var(--t-muted); }
+  .claim-card .actions {
+    margin-top: .6rem; padding-top: .6rem;
+    border-top: 1px solid var(--border);
+    display: flex; gap: .4rem;
+  }
+
+  .col-count {
+    background: rgba(255,255,255,.1);
+    border-radius: 999px;
+    padding: .15rem .55rem;
+    font-size: .72rem; font-weight: 800;
+  }
+
+  .empty-col {
+    text-align: center; padding: 2rem 1rem;
+    color: var(--t-muted); font-size: .8rem;
+  }
+
+  #drag-status {
+    position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--teal);
+    color: var(--teal); padding: .6rem 1.5rem;
+    border-radius: 999px; font-size: .82rem; font-weight: 700;
+    display: none; z-index: 999;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem">
+  <div>
+    <div style="font-size:.85rem;color:var(--t-secondary)">Drag claims between columns to update their status.</div>
+  </div>
+  <div style="display:flex;gap:.75rem">
+    <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-sm">📋 Table View</a>
+    <a href="{{ url_for('new_claim') }}" class="btn btn-primary btn-sm">➕ New Claim</a>
+  </div>
+</div>
+
+<div class="board" id="board">
+  {% set col_classes = {'New':'col-new','In Progress':'col-progress','Submitted':'col-submitted','Closed':'col-closed'} %}
+  {% set col_icons   = {'New':'🆕','In Progress':'⚙️','Submitted':'📤','Closed':'✅'} %}
+
+  {% for col in cols %}
+  <div class="kanban-col">
+    <div class="col-header {{ col_classes[col] }}">
+      <span>{{ col_icons[col] }} {{ col }}</span>
+      <span class="col-count">{{ board[col]|length }}</span>
+    </div>
+    <div class="col-body" data-status="{{ col }}"
+         ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+      {% if board[col] %}
+        {% for c in board[col] %}
+        <div class="claim-card" draggable="true"
+             data-id="{{ c.id }}" data-status="{{ c.status }}"
+             ondragstart="onDragStart(event)" ondragend="onDragEnd(event)">
+          <div class="cn">{{ c.claim_number }}</div>
+          <div class="client">{{ c.client_name }}</div>
+          <div class="addr">📍 {{ c.property_address[:40] }}{% if c.property_address|length > 40 %}…{% endif %}</div>
+          <div class="meta">
+            <span class="est">${{ "{:,.0f}".format(c.total_estimate) }}</span>
+            <span class="adj">{{ c.adjuster_name or '—' }}</span>
+          </div>
+          <div class="actions">
+            <a href="{{ url_for('claim_detail', claim_id=c.id) }}" class="btn btn-ghost btn-sm" style="flex:1;justify-content:center">View →</a>
+            <a href="{{ url_for('compliance', claim_id=c.id) }}" class="btn btn-amber btn-sm" title="NFIP Compliance">✅</a>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-col">Drop claims here</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div id="drag-status"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let dragging = null;
+
+function onDragStart(e) {
+  dragging = e.currentTarget;
+  dragging.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', dragging.dataset.id);
+}
+function onDragEnd(e) {
+  if (dragging) dragging.classList.remove('dragging');
+  document.querySelectorAll('.col-body').forEach(c => c.classList.remove('drag-over'));
+  dragging = null;
+}
+function onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over');
+}
+function onDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+function onDrop(e) {
+  e.preventDefault();
+  const col = e.currentTarget;
+  col.classList.remove('drag-over');
+  if (!dragging) return;
+  const newStatus = col.dataset.status;
+  const claimId   = dragging.dataset.id;
+  const oldStatus = dragging.dataset.status;
+  if (newStatus === oldStatus) return;
+
+  // Optimistic UI: move card immediately
+  const empty = col.querySelector('.empty-col');
+  if (empty) empty.remove();
+  col.appendChild(dragging);
+  dragging.dataset.status = newStatus;
+
+  // Update badge in the card
+  const badge = dragging.querySelector('.status-badge');
+  if (badge) badge.textContent = newStatus;
+
+  // Update column counts
+  updateCounts();
+
+  // Show toast
+  showStatus('Moving to ' + newStatus + '…');
+
+  // API call
+  fetch('/pipeline/move', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ claim_id: parseInt(claimId), status: newStatus })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) {
+      showStatus('✅ Moved to ' + newStatus);
+      setTimeout(() => hideStatus(), 2000);
+    } else {
+      showStatus('❌ Error: ' + (d.error || 'Failed'));
+      setTimeout(() => hideStatus(), 3000);
+    }
+  })
+  .catch(() => {
+    showStatus('❌ Network error');
+    setTimeout(() => hideStatus(), 3000);
+  });
+}
+
+function updateCounts() {
+  document.querySelectorAll('.kanban-col').forEach(col => {
+    const cards = col.querySelectorAll('.claim-card').length;
+    const badge = col.querySelector('.col-count');
+    if (badge) badge.textContent = cards;
+    // Add empty placeholder if needed
+    const body = col.querySelector('.col-body');
+    if (cards === 0 && !body.querySelector('.empty-col')) {
+      const d = document.createElement('div');
+      d.className = 'empty-col';
+      d.textContent = 'Drop claims here';
+      body.appendChild(d);
+    }
+  });
+}
+
+function showStatus(msg) {
+  const el = document.getElementById('drag-status');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function hideStatus() {
+  document.getElementById('drag-status').style.display = 'none';
+}
+</script>
+{% endblock %}

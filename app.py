@@ -407,6 +407,49 @@ def migrate_photos_columns():
 migrate_photos_columns()
 
 
+def migrate_new_features_v2():
+    """Add tables for Kanban, Scheduler, Notifications, Analytics — safe to run every boot."""
+    try:
+        db = sqlite3.connect(DB_PATH)
+        db.executescript('''
+            CREATE TABLE IF NOT EXISTS inspection_slots (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id    INTEGER REFERENCES claims(id) ON DELETE CASCADE,
+                adjuster_id INTEGER REFERENCES users(id),
+                slot_date   TEXT NOT NULL,
+                slot_time   TEXT NOT NULL,
+                status      TEXT DEFAULT 'pending',
+                notes       TEXT DEFAULT '',
+                created_at  TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS notifications_log (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id    INTEGER REFERENCES claims(id) ON DELETE CASCADE,
+                type        TEXT NOT NULL,
+                recipient   TEXT NOT NULL,
+                message     TEXT NOT NULL,
+                sent_at     TEXT DEFAULT CURRENT_TIMESTAMP,
+                status      TEXT DEFAULT 'sent'
+            );
+        ''')
+        # Add inspection_date + kanban_order columns to claims if missing
+        cols = [r[1] for r in db.execute('PRAGMA table_info(claims)').fetchall()]
+        extras = [
+            ('kanban_order',  'INTEGER DEFAULT 0'),
+            ('sched_date',    'TEXT DEFAULT ""'),
+            ('sched_time',    'TEXT DEFAULT ""'),
+        ]
+        for col, typedef in extras:
+            if col not in cols:
+                db.execute(f'ALTER TABLE claims ADD COLUMN {col} {typedef}')
+        db.commit()
+        db.close()
+    except Exception as e:
+        print(f'migrate_new_features_v2 error: {e}')
+
+migrate_new_features_v2()
+
+
 # ── Integrations: FEMA, Maps, Email (helpers only — routes defined after auth) ──
 
 def lookup_fema_flood_zone(address):
@@ -2758,6 +2801,374 @@ def ai_describe_photo_detailed(image_path, key, model):
         return r.json()['choices'][0]['message']['content']
     except Exception:
         return ''
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FEATURE 1: KANBAN PIPELINE VIEW
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/pipeline')
+@login_required
+def pipeline():
+    db = get_db()
+    if session['role'] == 'admin':
+        claims = db.execute('''
+            SELECT c.*, u.name as adjuster_name
+            FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id
+            ORDER BY c.kanban_order ASC, c.created_at DESC
+        ''').fetchall()
+    else:
+        claims = db.execute('''
+            SELECT c.*, u.name as adjuster_name
+            FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id
+            WHERE c.adjuster_id=?
+            ORDER BY c.kanban_order ASC, c.created_at DESC
+        ''', (session['user_id'],)).fetchall()
+    cols = ['New', 'In Progress', 'Submitted', 'Closed']
+    board = {col: [c for c in claims if c['status'] == col] for col in cols}
+    return render_template('pipeline.html', board=board, cols=cols)
+
+
+@app.route('/pipeline/move', methods=['POST'])
+@login_required
+def pipeline_move():
+    """AJAX: move a claim to a new status column."""
+    data      = request.get_json() or {}
+    claim_id  = data.get('claim_id')
+    new_status = data.get('status')
+    valid = ['New', 'In Progress', 'Submitted', 'Closed']
+    if not claim_id or new_status not in valid:
+        return jsonify({'ok': False, 'error': 'Invalid'}), 400
+    db = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim:
+        return jsonify({'ok': False, 'error': 'Not found'}), 404
+    if session['role'] != 'admin' and claim['adjuster_id'] != session['user_id']:
+        return jsonify({'ok': False, 'error': 'Forbidden'}), 403
+    old_status = claim['status']
+    db.execute('UPDATE claims SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+               (new_status, claim_id))
+    db.commit()
+    # Fire status-change notification
+    if old_status != new_status and claim['client_email']:
+        notify_client_status_change(claim, new_status)
+        _log_notification(claim_id, 'status_change',
+                          claim['client_email'],
+                          f'Claim {claim["claim_number"]} moved to {new_status}')
+    return jsonify({'ok': True})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FEATURE 2: INSPECTION SCHEDULER
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/schedule')
+@login_required
+def schedule():
+    db = get_db()
+    if session['role'] == 'admin':
+        slots = db.execute('''
+            SELECT s.*, c.claim_number, c.client_name, c.property_address,
+                   u.name as adjuster_name
+            FROM inspection_slots s
+            JOIN claims c ON s.claim_id = c.id
+            LEFT JOIN users u ON s.adjuster_id = u.id
+            ORDER BY s.slot_date ASC, s.slot_time ASC
+        ''').fetchall()
+        claims = db.execute('''
+            SELECT id, claim_number, client_name, property_address, adjuster_id
+            FROM claims WHERE status != 'Closed' ORDER BY created_at DESC
+        ''').fetchall()
+        adjusters = db.execute('SELECT id, name FROM users ORDER BY name').fetchall()
+    else:
+        slots = db.execute('''
+            SELECT s.*, c.claim_number, c.client_name, c.property_address,
+                   u.name as adjuster_name
+            FROM inspection_slots s
+            JOIN claims c ON s.claim_id = c.id
+            LEFT JOIN users u ON s.adjuster_id = u.id
+            WHERE s.adjuster_id = ?
+            ORDER BY s.slot_date ASC, s.slot_time ASC
+        ''', (session['user_id'],)).fetchall()
+        claims = db.execute('''
+            SELECT id, claim_number, client_name, property_address, adjuster_id
+            FROM claims WHERE adjuster_id=? AND status != 'Closed'
+            ORDER BY created_at DESC
+        ''', (session['user_id'],)).fetchall()
+        adjusters = []
+    today = datetime.date.today().isoformat()
+    return render_template('schedule.html', slots=slots, claims=claims,
+                           adjusters=adjusters, today=today)
+
+
+@app.route('/schedule/add', methods=['POST'])
+@login_required
+@csrf_required
+def schedule_add():
+    db        = get_db()
+    claim_id  = request.form.get('claim_id')
+    slot_date = request.form.get('slot_date')
+    slot_time = request.form.get('slot_time')
+    notes     = request.form.get('notes', '')
+    adj_id    = request.form.get('adjuster_id') or session['user_id']
+    if not claim_id or not slot_date or not slot_time:
+        flash('Claim, date and time are required.', 'error')
+        return redirect(url_for('schedule'))
+    db.execute('''
+        INSERT INTO inspection_slots (claim_id, adjuster_id, slot_date, slot_time, notes)
+        VALUES (?,?,?,?,?)
+    ''', (claim_id, adj_id, slot_date, slot_time, notes))
+    # Update claim's sched fields
+    db.execute('UPDATE claims SET sched_date=?, sched_time=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+               (slot_date, slot_time, claim_id))
+    db.commit()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    # Email adjuster
+    adj = db.execute('SELECT * FROM users WHERE id=?', (adj_id,)).fetchone()
+    if adj and adj['email']:
+        send_email(adj['email'],
+                   f'Inspection Scheduled — {claim["claim_number"]}',
+                   f'<p>An inspection has been scheduled for claim <strong>{claim["claim_number"]}</strong> '
+                   f'({claim["client_name"]}) on <strong>{slot_date} at {slot_time}</strong>.</p>'
+                   f'<p>Property: {claim["property_address"]}</p>'
+                   f'<p>Notes: {notes or "None"}</p>')
+    flash(f'Inspection scheduled for {slot_date} at {slot_time}.', 'success')
+    return redirect(url_for('schedule'))
+
+
+@app.route('/schedule/<int:slot_id>/status', methods=['POST'])
+@login_required
+def schedule_update_status(slot_id):
+    new_status = request.form.get('status', 'pending')
+    db = get_db()
+    db.execute('UPDATE inspection_slots SET status=? WHERE id=?', (new_status, slot_id))
+    db.commit()
+    return redirect(url_for('schedule'))
+
+
+@app.route('/schedule/<int:slot_id>/delete', methods=['POST'])
+@login_required
+@csrf_required
+def schedule_delete(slot_id):
+    db = get_db()
+    db.execute('DELETE FROM inspection_slots WHERE id=?', (slot_id,))
+    db.commit()
+    flash('Inspection removed.', 'success')
+    return redirect(url_for('schedule'))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FEATURE 3: AUTOMATED NOTIFICATIONS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _log_notification(claim_id, notif_type, recipient, message):
+    """Log a sent notification to the DB."""
+    try:
+        db = get_db()
+        db.execute(
+            'INSERT INTO notifications_log (claim_id, type, recipient, message) VALUES (?,?,?,?)',
+            (claim_id, notif_type, recipient, message)
+        )
+        db.commit()
+    except Exception as e:
+        print(f'_log_notification error: {e}')
+
+
+@app.route('/notifications')
+@login_required
+def notifications():
+    db = get_db()
+    if session['role'] == 'admin':
+        logs = db.execute('''
+            SELECT n.*, c.claim_number, c.client_name
+            FROM notifications_log n
+            LEFT JOIN claims c ON n.claim_id = c.id
+            ORDER BY n.sent_at DESC LIMIT 200
+        ''').fetchall()
+    else:
+        logs = db.execute('''
+            SELECT n.*, c.claim_number, c.client_name
+            FROM notifications_log n
+            LEFT JOIN claims c ON n.claim_id = c.id
+            WHERE c.adjuster_id = ?
+            ORDER BY n.sent_at DESC LIMIT 200
+        ''', (session['user_id'],)).fetchall()
+    return render_template('notifications.html', logs=logs)
+
+
+@app.route('/notifications/send', methods=['POST'])
+@login_required
+@csrf_required
+def notifications_send():
+    """Manually send a status update email for a claim."""
+    claim_id = request.form.get('claim_id')
+    message  = request.form.get('message', '').strip()
+    db = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim:
+        flash('Claim not found.', 'error')
+        return redirect(url_for('notifications'))
+    if not claim['client_email']:
+        flash('No client email on this claim.', 'error')
+        return redirect(url_for('notifications'))
+    subject = f'Update on your FloodClaim — {claim["claim_number"]}'
+    html = f'''<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+        <h2 style="color:#0a1628">FloodClaim Pro — Claim Update</h2>
+        <p>Hello {claim["client_name"]},</p>
+        <p>{message}</p>
+        <p style="background:#f0fdf4;padding:12px;border-radius:8px;border-left:4px solid #10b981">
+            <strong>Claim #: {claim["claim_number"]}</strong><br>
+            Status: {claim["status"]}
+        </p>
+        <hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0">
+        <p style="font-size:12px;color:#94a3b8">FloodClaim Pro · Professional Flood Damage Assessment</p>
+    </div>'''
+    sent = send_email(claim['client_email'], subject, html)
+    if sent:
+        _log_notification(claim_id, 'manual', claim['client_email'], message)
+        flash(f'Notification sent to {claim["client_email"]}.', 'success')
+    else:
+        flash('Email not sent — configure SendGrid in Settings.', 'error')
+    return redirect(url_for('notifications'))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FEATURE 4: NFIP COMPLIANCE CHECKLIST
+# ─────────────────────────────────────────────────────────────────────────────
+
+NFIP_CHECKLIST = [
+    ('policy',         'Policy number recorded'),
+    ('policy_type',    'Policy type identified (Building/Contents/Both)'),
+    ('coverage_bldg',  'Building coverage amount documented'),
+    ('coverage_cont',  'Contents coverage amount documented'),
+    ('deductible',     'Deductible amount confirmed'),
+    ('flood_date',     'Date of loss (flood date) recorded'),
+    ('flood_source',   'Flood source documented (river, storm, sewer, etc.)'),
+    ('water_cat',      'Water category assigned (Cat 1/2/3)'),
+    ('water_class',    'Water class assigned (Class 1–4)'),
+    ('water_depth',    'Water depth documented (inches)'),
+    ('water_removed',  'Date water removed recorded'),
+    ('inspection',     'Inspection date scheduled/completed'),
+    ('flood_zone',     'FEMA flood zone looked up'),
+    ('fema_map',       'FEMA map panel number recorded'),
+    ('photos',         'Damage photos uploaded'),
+    ('rooms',          'Room-by-room scope documented'),
+    ('estimate',       'AI estimate generated'),
+    ('mortgage',       'Mortgage company/loan # recorded (if applicable)'),
+]
+
+
+@app.route('/claims/<int:claim_id>/compliance')
+@login_required
+def compliance(claim_id):
+    db    = get_db()
+    claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim:
+        flash('Claim not found.', 'error')
+        return redirect(url_for('dashboard'))
+    rooms  = db.execute('SELECT id FROM rooms WHERE claim_id=?', (claim_id,)).fetchall()
+    photos = db.execute('SELECT id FROM photos WHERE claim_id=?', (claim_id,)).fetchall()
+    checks = {
+        'policy':        bool(claim['policy_number']),
+        'policy_type':   bool(claim['policy_type']),
+        'coverage_bldg': bool(claim['coverage_building']),
+        'coverage_cont': bool(claim['coverage_contents']),
+        'deductible':    bool(claim['deductible']),
+        'flood_date':    bool(claim['flood_date']),
+        'flood_source':  bool(claim['flood_source']),
+        'water_cat':     bool(claim['water_category']),
+        'water_class':   bool(claim['water_class']),
+        'water_depth':   bool(claim['water_depth_in']),
+        'water_removed': bool(claim['date_water_removed']),
+        'inspection':    bool(claim['inspection_date']),
+        'flood_zone':    bool(claim['flood_zone'] and claim['flood_zone'] != 'Unknown'),
+        'fema_map':      bool(claim['fema_map_number']),
+        'photos':        len(photos) >= 3,
+        'rooms':         len(rooms) >= 1,
+        'estimate':      bool(claim['total_estimate']),
+        'mortgage':      True,  # optional — always pass
+    }
+    score  = sum(1 for v in checks.values() if v)
+    total  = len(checks)
+    pct    = round(score / total * 100)
+    return render_template('compliance.html', claim=claim, checklist=NFIP_CHECKLIST,
+                           checks=checks, score=score, total=total, pct=pct)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FEATURE 5: ANALYTICS DASHBOARD
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/analytics')
+@login_required
+def analytics():
+    db = get_db()
+    # All claims visible to this user
+    if session['role'] == 'admin':
+        claims = db.execute('SELECT * FROM claims ORDER BY created_at ASC').fetchall()
+    else:
+        claims = db.execute('SELECT * FROM claims WHERE adjuster_id=? ORDER BY created_at ASC',
+                            (session['user_id'],)).fetchall()
+
+    total   = len(claims)
+    closed  = [c for c in claims if c['status'] == 'Closed']
+    open_c  = [c for c in claims if c['status'] != 'Closed']
+    pipeline_val = sum(c['total_estimate'] for c in open_c)
+    closed_val   = sum(c['total_estimate'] for c in closed)
+
+    # Avg cycle time (created_at → last updated_at for closed claims)
+    cycle_times = []
+    for c in closed:
+        try:
+            start = datetime.datetime.fromisoformat(c['created_at'])
+            end   = datetime.datetime.fromisoformat(c['updated_at'])
+            diff  = (end - start).days
+            if diff >= 0:
+                cycle_times.append(diff)
+        except Exception:
+            pass
+    avg_cycle = round(sum(cycle_times) / len(cycle_times), 1) if cycle_times else None
+
+    # Claims by month (last 12 months)
+    from collections import defaultdict
+    monthly = defaultdict(lambda: {'count': 0, 'value': 0.0})
+    for c in claims:
+        try:
+            mo = c['created_at'][:7]  # 'YYYY-MM'
+            monthly[mo]['count'] += 1
+            monthly[mo]['value'] += c['total_estimate']
+        except Exception:
+            pass
+    months_sorted = sorted(monthly.keys())[-12:]
+    chart_labels  = months_sorted
+    chart_counts  = [monthly[m]['count'] for m in months_sorted]
+    chart_values  = [round(monthly[m]['value'], 2) for m in months_sorted]
+
+    # Status breakdown
+    status_counts = {
+        'New':         sum(1 for c in claims if c['status'] == 'New'),
+        'In Progress': sum(1 for c in claims if c['status'] == 'In Progress'),
+        'Submitted':   sum(1 for c in claims if c['status'] == 'Submitted'),
+        'Closed':      sum(1 for c in claims if c['status'] == 'Closed'),
+    }
+
+    # Top adjusters (admin only)
+    top_adjusters = []
+    if session['role'] == 'admin':
+        rows = db.execute('''
+            SELECT u.name, COUNT(c.id) as cnt, COALESCE(SUM(c.total_estimate),0) as total
+            FROM claims c JOIN users u ON c.adjuster_id=u.id
+            GROUP BY c.adjuster_id ORDER BY cnt DESC LIMIT 10
+        ''').fetchall()
+        top_adjusters = [dict(r) for r in rows]
+
+    return render_template('analytics.html',
+                           total=total, pipeline_val=pipeline_val, closed_val=closed_val,
+                           avg_cycle=avg_cycle, status_counts=status_counts,
+                           chart_labels=json.dumps(chart_labels),
+                           chart_counts=json.dumps(chart_counts),
+                           chart_values=json.dumps(chart_values),
+                           top_adjusters=top_adjusters)
 
 
 @app.route('/health')

@@ -555,6 +555,18 @@
     <a href="{{ url_for('new_claim') }}" class="nav-link {% if request.endpoint=='new_claim' %}active{% endif %}">
       <i data-lucide="plus-circle" class="nav-link-icon"></i> New Claim
     </a>
+    <a href="{{ url_for('pipeline') }}" class="nav-link {% if request.endpoint=='pipeline' %}active{% endif %}">
+      <i data-lucide="kanban" class="nav-link-icon"></i> Pipeline
+    </a>
+    <a href="{{ url_for('schedule') }}" class="nav-link {% if request.endpoint=='schedule' %}active{% endif %}">
+      <i data-lucide="calendar-check" class="nav-link-icon"></i> Schedule
+    </a>
+    <a href="{{ url_for('analytics') }}" class="nav-link {% if request.endpoint=='analytics' %}active{% endif %}">
+      <i data-lucide="bar-chart-2" class="nav-link-icon"></i> Analytics
+    </a>
+    <a href="{{ url_for('notifications') }}" class="nav-link {% if request.endpoint=='notifications' %}active{% endif %}">
+      <i data-lucide="bell" class="nav-link-icon"></i> Notifications
+    </a>
 
     {% if session.role == 'admin' %}
     <div class="nav-section">Admin</div>

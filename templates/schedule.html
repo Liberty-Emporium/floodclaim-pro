@@ -1,0 +1,216 @@
+{% extends 'base.html' %}
+{% block title %}Schedule — FloodClaim Pro{% endblock %}
+{% block page_title %}📅 Inspection Schedule{% endblock %}
+
+{% block extra_css %}
+<style>
+  .sched-grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 1.5rem;
+    align-items: start;
+  }
+  @media (max-width: 850px) { .sched-grid { grid-template-columns: 1fr; } }
+
+  .slot-card {
+    display: flex; gap: 1rem; align-items: flex-start;
+    padding: 1rem 1.1rem;
+    border-bottom: 1px solid var(--border);
+    transition: background .15s;
+  }
+  .slot-card:last-child { border-bottom: none; }
+  .slot-card:hover { background: rgba(6,214,199,.03); }
+
+  .slot-date-block {
+    flex: 0 0 70px; text-align: center;
+    background: rgba(6,214,199,.08);
+    border: 1px solid rgba(6,214,199,.2);
+    border-radius: 10px; padding: .5rem .4rem;
+  }
+  .slot-date-block .dow {
+    font-size: .65rem; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .08em;
+    color: var(--teal);
+  }
+  .slot-date-block .day  {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.6rem; font-weight: 800;
+    color: var(--t-primary); line-height: 1.1;
+  }
+  .slot-date-block .mon  {
+    font-size: .68rem; font-weight: 700;
+    color: var(--t-secondary); text-transform: uppercase;
+  }
+
+  .slot-info { flex: 1; min-width: 0; }
+  .slot-time { font-size: .8rem; font-weight: 700; color: var(--amber); margin-bottom: .2rem; }
+  .slot-claim { font-weight: 700; font-size: .9rem; color: var(--t-primary); margin-bottom: .2rem; }
+  .slot-addr  { font-size: .78rem; color: var(--t-secondary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .slot-adj   { font-size: .75rem; color: var(--t-muted); margin-top: .2rem; }
+
+  .slot-actions { display: flex; flex-direction: column; gap: .4rem; align-items: flex-end; }
+
+  .status-pill {
+    display: inline-flex; align-items: center;
+    padding: .2rem .65rem; border-radius: 999px;
+    font-size: .65rem; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .06em;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+  .s-pending   { background: rgba(251,191,36,.1);  color: var(--amber); border-color: rgba(251,191,36,.25); }
+  .s-confirmed { background: rgba(52,211,153,.1);  color: var(--green); border-color: rgba(52,211,153,.25); }
+  .s-done      { background: rgba(6,214,199,.1);   color: var(--teal);  border-color: rgba(6,214,199,.25); }
+  .s-cancelled { background: rgba(248,113,113,.1); color: var(--red);   border-color: rgba(248,113,113,.25); }
+
+  .today-chip {
+    display: inline-block;
+    background: rgba(6,214,199,.15); color: var(--teal);
+    border-radius: 999px; padding: .15rem .65rem;
+    font-size: .65rem; font-weight: 800;
+    margin-left: .4rem; vertical-align: middle;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sched-grid">
+
+  <!-- LEFT: Upcoming inspections -->
+  <div>
+    <!-- Upcoming -->
+    <div class="card" style="margin-bottom:1.25rem">
+      <div class="card-header">
+        <div class="card-title">📆 Upcoming Inspections</div>
+        <span style="font-size:.78rem;color:var(--t-secondary)">{{ slots|selectattr('status','ne','cancelled')|list|length }} scheduled</span>
+      </div>
+      {% set upcoming = slots|selectattr('slot_date','ge',today)|list %}
+      {% if upcoming %}
+        {% for s in upcoming %}
+        {% set parts = s.slot_date.split('-') %}
+        {% set is_today = (s.slot_date == today) %}
+        <div class="slot-card">
+          <div class="slot-date-block">
+            {% set days = ['MON','TUE','WED','THU','FRI','SAT','SUN'] %}
+            <div class="dow">{{ s.slot_date }}</div>
+            <div class="day">{{ parts[2] }}</div>
+            <div class="mon">{{ ['','JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][parts[1]|int] }}</div>
+          </div>
+          <div class="slot-info">
+            <div class="slot-time">🕐 {{ s.slot_time }}{% if is_today %}<span class="today-chip">TODAY</span>{% endif %}</div>
+            <div class="slot-claim">
+              <a href="{{ url_for('claim_detail', claim_id=s.claim_id) }}" style="color:var(--t-primary);text-decoration:none;">
+                {{ s.claim_number }} — {{ s.client_name }}
+              </a>
+            </div>
+            <div class="slot-addr">📍 {{ s.property_address }}</div>
+            <div class="slot-adj">👤 {{ s.adjuster_name or 'Unassigned' }}</div>
+            {% if s.notes %}<div style="font-size:.75rem;color:var(--t-secondary);margin-top:.3rem;font-style:italic">📝 {{ s.notes }}</div>{% endif %}
+          </div>
+          <div class="slot-actions">
+            <span class="status-pill s-{{ s.status }}">{{ s.status }}</span>
+            <!-- Quick status update -->
+            <form method="POST" action="{{ url_for('schedule_update_status', slot_id=s.id) }}" style="display:flex;gap:.3rem">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <select name="status" class="form-control" style="font-size:.72rem;padding:.2rem .5rem;width:auto" onchange="this.form.submit()">
+                <option value="pending"   {% if s.status=='pending'   %}selected{% endif %}>Pending</option>
+                <option value="confirmed" {% if s.status=='confirmed' %}selected{% endif %}>Confirmed</option>
+                <option value="done"      {% if s.status=='done'      %}selected{% endif %}>Done</option>
+                <option value="cancelled" {% if s.status=='cancelled' %}selected{% endif %}>Cancelled</option>
+              </select>
+            </form>
+            <form method="POST" action="{{ url_for('schedule_delete', slot_id=s.id) }}"
+                  onsubmit="return confirm('Remove this inspection?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-danger btn-sm" style="padding:.25rem .6rem;font-size:.72rem">🗑</button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div style="text-align:center;padding:3rem;color:var(--t-muted)">
+          <div style="font-size:2.5rem;margin-bottom:.75rem">📅</div>
+          <div style="font-weight:600;margin-bottom:.4rem">No upcoming inspections</div>
+          <div style="font-size:.82rem">Schedule one using the form →</div>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Past -->
+    {% set past = slots|selectattr('slot_date','lt',today)|list %}
+    {% if past %}
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title" style="color:var(--t-secondary)">📁 Past Inspections</div>
+        <span style="font-size:.78rem;color:var(--t-muted)">{{ past|length }}</span>
+      </div>
+      {% for s in past|reverse %}
+      {% set parts = s.slot_date.split('-') %}
+      <div class="slot-card" style="opacity:.6">
+        <div class="slot-date-block" style="opacity:.7">
+          <div class="dow">{{ s.slot_date }}</div>
+          <div class="day">{{ parts[2] }}</div>
+          <div class="mon">{{ ['','JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][parts[1]|int] }}</div>
+        </div>
+        <div class="slot-info">
+          <div class="slot-time">🕐 {{ s.slot_time }}</div>
+          <div class="slot-claim">{{ s.claim_number }} — {{ s.client_name }}</div>
+          <div class="slot-addr">📍 {{ s.property_address }}</div>
+        </div>
+        <div class="slot-actions">
+          <span class="status-pill s-{{ s.status }}">{{ s.status }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- RIGHT: Schedule form -->
+  <div class="card" style="position:sticky;top:80px">
+    <div class="card-header">
+      <div class="card-title">➕ Schedule Inspection</div>
+    </div>
+    <form method="POST" action="{{ url_for('schedule_add') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-group">
+        <label>Claim</label>
+        <select name="claim_id" class="form-control" required>
+          <option value="">— Select a claim —</option>
+          {% for c in claims %}
+          <option value="{{ c.id }}">{{ c.claim_number }} — {{ c.client_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Date</label>
+          <input type="date" name="slot_date" class="form-control" required min="{{ today }}">
+        </div>
+        <div class="form-group">
+          <label>Time</label>
+          <input type="time" name="slot_time" class="form-control" required>
+        </div>
+      </div>
+      {% if adjusters %}
+      <div class="form-group">
+        <label>Adjuster</label>
+        <select name="adjuster_id" class="form-control">
+          <option value="">— Assign adjuster —</option>
+          {% for a in adjusters %}
+          <option value="{{ a.id }}">{{ a.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div class="form-group">
+        <label>Notes (optional)</label>
+        <textarea name="notes" class="form-control" rows="3" placeholder="Entry instructions, contact info, etc."></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%">📅 Schedule Inspection</button>
+    </form>
+  </div>
+
+</div>
+{% endblock %}

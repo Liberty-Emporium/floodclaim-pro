@@ -1,0 +1,262 @@
+{% extends 'base.html' %}
+{% block title %}Analytics — FloodClaim Pro{% endblock %}
+{% block page_title %}📊 Analytics{% endblock %}
+
+{% block extra_css %}
+<style>
+  .ana-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .ana-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.25rem 1.1rem;
+    position: relative; overflow: hidden;
+    transition: transform .2s, box-shadow .2s;
+  }
+  .ana-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  .ana-card .val {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.8rem; font-weight: 800;
+    letter-spacing: -.04em; line-height: 1;
+    margin-bottom: .3rem;
+  }
+  .ana-card .lbl {
+    font-size: .72rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .09em;
+    color: var(--t-secondary);
+  }
+  .ana-card .sub { font-size: .75rem; color: var(--t-muted); margin-top: .25rem; }
+
+  .chart-wrap {
+    position: relative; width: 100%; height: 260px;
+  }
+  .charts-row {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 1.5rem;
+    align-items: start;
+  }
+  @media (max-width: 850px) { .charts-row { grid-template-columns: 1fr; } }
+
+  .doughnut-wrap {
+    position: relative; width: 200px; height: 200px;
+    margin: 1rem auto;
+  }
+
+  .adj-row {
+    display: flex; align-items: center; gap: .85rem;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    transition: background .12s;
+  }
+  .adj-row:last-child { border-bottom: none; }
+  .adj-row:hover { background: rgba(6,214,199,.025); }
+  .adj-rank {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--grad); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .72rem; font-weight: 800; flex-shrink: 0;
+  }
+  .adj-name { flex: 1; font-weight: 600; font-size: .88rem; }
+  .adj-cnt  { font-size: .78rem; color: var(--teal); font-weight: 700; }
+  .adj-val  { font-size: .78rem; color: var(--green); font-weight: 700; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+
+<!-- KPI tiles -->
+<div class="ana-grid">
+  <div class="ana-card" style="--tile-c:var(--teal)">
+    <div class="val" style="color:var(--teal)">{{ total }}</div>
+    <div class="lbl">Total Claims</div>
+    <div class="sub">All time</div>
+  </div>
+  <div class="ana-card">
+    <div class="val" style="color:var(--green)">${{ "{:,.0f}".format(pipeline_val) }}</div>
+    <div class="lbl">Open Pipeline</div>
+    <div class="sub">{{ status_counts['New'] + status_counts['In Progress'] + status_counts['Submitted'] }} open claims</div>
+  </div>
+  <div class="ana-card">
+    <div class="val" style="color:var(--blue)">${{ "{:,.0f}".format(closed_val) }}</div>
+    <div class="lbl">Closed Revenue</div>
+    <div class="sub">{{ status_counts['Closed'] }} closed claims</div>
+  </div>
+  <div class="ana-card">
+    <div class="val" style="color:var(--amber)">{{ avg_cycle if avg_cycle is not none else '—' }}{% if avg_cycle is not none %}<span style="font-size:1rem">d</span>{% endif %}</div>
+    <div class="lbl">Avg Cycle Time</div>
+    <div class="sub">Created → closed</div>
+  </div>
+  <div class="ana-card">
+    <div class="val" style="color:var(--cyan)">{{ status_counts['New'] }}</div>
+    <div class="lbl">New Claims</div>
+    <div class="sub">Awaiting action</div>
+  </div>
+  <div class="ana-card">
+    <div class="val" style="color:var(--purple)">{{ status_counts['In Progress'] }}</div>
+    <div class="lbl">In Progress</div>
+    <div class="sub">Active work</div>
+  </div>
+</div>
+
+<!-- Charts row -->
+<div class="charts-row">
+
+  <!-- Bar chart: Claims + Value by Month -->
+  <div class="card" style="margin:0">
+    <div class="card-header">
+      <div class="card-title">📈 Claims by Month</div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="monthChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Doughnut: Status breakdown -->
+  <div class="card" style="margin:0">
+    <div class="card-header">
+      <div class="card-title">🥧 Status Breakdown</div>
+    </div>
+    <div class="doughnut-wrap">
+      <canvas id="statusChart"></canvas>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;margin-top:.75rem">
+      {% set status_colors = {'New':'#06D6C7','In Progress':'#FBBF24','Submitted':'#3B7BFF','Closed':'#34D399'} %}
+      {% for s, cnt in status_counts.items() %}
+      <div style="display:flex;align-items:center;gap:.35rem;font-size:.78rem">
+        <span style="width:10px;height:10px;border-radius:50%;background:{{ status_colors[s] }};display:inline-block"></span>
+        <span style="color:var(--t-secondary)">{{ s }}</span>
+        <span style="font-weight:700;color:var(--t-primary)">{{ cnt }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Top Adjusters (admin only) -->
+{% if top_adjusters %}
+<div class="card" style="margin-top:1.5rem">
+  <div class="card-header">
+    <div class="card-title">🏆 Top Adjusters</div>
+  </div>
+  {% for a in top_adjusters[:10] %}
+  <div class="adj-row">
+    <div class="adj-rank">{{ loop.index }}</div>
+    <div class="adj-name">{{ a.name }}</div>
+    <div class="adj-cnt">{{ a.cnt }} claims</div>
+    <div class="adj-val">${{ "{:,.0f}".format(a.total) }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const chartLabels  = {{ chart_labels|safe }};
+const chartCounts  = {{ chart_counts|safe }};
+const chartValues  = {{ chart_values|safe }};
+
+// Month bar chart
+const ctx1 = document.getElementById('monthChart').getContext('2d');
+new Chart(ctx1, {
+  type: 'bar',
+  data: {
+    labels: chartLabels,
+    datasets: [
+      {
+        label: 'Claims',
+        data: chartCounts,
+        backgroundColor: 'rgba(6,214,199,.55)',
+        borderColor: '#06D6C7',
+        borderWidth: 1.5,
+        borderRadius: 5,
+        yAxisID: 'y',
+      },
+      {
+        label: 'Value ($)',
+        data: chartValues,
+        type: 'line',
+        borderColor: '#3B7BFF',
+        backgroundColor: 'rgba(59,123,255,.08)',
+        borderWidth: 2,
+        pointRadius: 4,
+        pointBackgroundColor: '#3B7BFF',
+        fill: true,
+        tension: .35,
+        yAxisID: 'y1',
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: '#7A8BAD', font: { size: 11, weight: '700' } } },
+      tooltip: {
+        callbacks: {
+          label: ctx => ctx.dataset.label === 'Value ($)'
+            ? ' $' + Number(ctx.raw).toLocaleString()
+            : ' ' + ctx.raw + ' claims'
+        }
+      }
+    },
+    scales: {
+      x: { ticks: { color: '#4A5568', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,.04)' } },
+      y: {
+        ticks: { color: '#4A5568', font: { size: 11 } },
+        grid:  { color: 'rgba(255,255,255,.04)' },
+        title: { display: true, text: 'Claims', color: '#06D6C7', font: { size: 10 } }
+      },
+      y1: {
+        position: 'right',
+        ticks: {
+          color: '#4A5568', font: { size: 11 },
+          callback: v => '$' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v)
+        },
+        grid: { display: false },
+        title: { display: true, text: 'Value', color: '#3B7BFF', font: { size: 10 } }
+      }
+    }
+  }
+});
+
+// Status doughnut
+const statusLabels = ['New', 'In Progress', 'Submitted', 'Closed'];
+const statusData   = [
+  {{ status_counts['New'] }},
+  {{ status_counts['In Progress'] }},
+  {{ status_counts['Submitted'] }},
+  {{ status_counts['Closed'] }}
+];
+const ctx2 = document.getElementById('statusChart').getContext('2d');
+new Chart(ctx2, {
+  type: 'doughnut',
+  data: {
+    labels: statusLabels,
+    datasets: [{
+      data: statusData,
+      backgroundColor: ['#06D6C7','#FBBF24','#3B7BFF','#34D399'],
+      borderColor: '#0D1526',
+      borderWidth: 3,
+      hoverOffset: 6,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    cutout: '68%',
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw}` } }
+    }
+  }
+});
+</script>
+{% endblock %}

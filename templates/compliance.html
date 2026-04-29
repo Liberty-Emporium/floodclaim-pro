@@ -1,0 +1,178 @@
+{% extends 'base.html' %}
+{% block title %}NFIP Compliance — {{ claim.claim_number }}{% endblock %}
+{% block page_title %}✅ NFIP Compliance{% endblock %}
+
+{% block extra_css %}
+<style>
+  .score-ring-wrap {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 2rem;
+  }
+  .score-ring {
+    position: relative; width: 140px; height: 140px;
+  }
+  .score-ring svg { transform: rotate(-90deg); }
+  .score-ring .ring-bg  { fill: none; stroke: rgba(255,255,255,.06); stroke-width: 12; }
+  .score-ring .ring-val { fill: none; stroke-width: 12; stroke-linecap: round;
+    transition: stroke-dashoffset 1s cubic-bezier(.4,0,.2,1); }
+  .score-center {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .score-pct {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 2rem; font-weight: 800; line-height: 1;
+  }
+  .score-label { font-size: .68rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--t-secondary); }
+
+  .checklist-item {
+    display: flex; align-items: center; gap: .85rem;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    transition: background .12s;
+  }
+  .checklist-item:last-child { border-bottom: none; }
+  .checklist-item:hover { background: rgba(6,214,199,.025); }
+
+  .check-icon {
+    width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .85rem; font-weight: 800;
+  }
+  .check-ok   { background: rgba(52,211,153,.15); color: var(--green); }
+  .check-fail { background: rgba(248,113,113,.12); color: var(--red); }
+
+  .check-label { flex: 1; font-size: .88rem; color: var(--t-primary); }
+  .check-req { font-size: .68rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .07em; padding: .15rem .5rem; border-radius: 999px; }
+  .check-req-ok   { background: rgba(52,211,153,.1);  color: var(--green); }
+  .check-req-fail { background: rgba(248,113,113,.1); color: var(--red); }
+
+  .grade-chip {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .4rem 1.1rem; border-radius: 999px;
+    font-size: .85rem; font-weight: 800;
+    margin-top: .75rem;
+  }
+  .grade-a { background: rgba(52,211,153,.15); color: var(--green); border: 1px solid rgba(52,211,153,.3); }
+  .grade-b { background: rgba(6,214,199,.12);  color: var(--teal);  border: 1px solid rgba(6,214,199,.3); }
+  .grade-c { background: rgba(251,191,36,.12); color: var(--amber); border: 1px solid rgba(251,191,36,.3); }
+  .grade-d { background: rgba(248,113,113,.1); color: var(--red);   border: 1px solid rgba(248,113,113,.3); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Header -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem">
+  <div>
+    <div style="font-size:1.1rem;font-weight:800;color:var(--t-primary)">{{ claim.client_name }}</div>
+    <div style="font-size:.85rem;color:var(--t-secondary);margin-top:.15rem">
+      {{ claim.claim_number }} · {{ claim.property_address }}
+    </div>
+  </div>
+  <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+    <a href="{{ url_for('claim_detail', claim_id=claim.id) }}" class="btn btn-ghost btn-sm">← Back to Claim</a>
+    <a href="{{ url_for('report', claim_id=claim.id) }}" class="btn btn-cyan btn-sm" target="_blank">📄 View Report</a>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:240px 1fr;gap:1.5rem;align-items:start">
+
+  <!-- Score ring -->
+  <div class="card" style="margin:0">
+    <div class="score-ring-wrap">
+      <div class="score-ring">
+        <svg viewBox="0 0 140 140" width="140" height="140">
+          <circle class="ring-bg" cx="70" cy="70" r="58"/>
+          <circle class="ring-val" id="ring-val" cx="70" cy="70" r="58"
+            stroke="{{ '#34D399' if pct >= 80 else ('#FBBF24' if pct >= 50 else '#F87171') }}"
+            stroke-dasharray="{{ 2 * 3.14159 * 58 }}"
+            stroke-dashoffset="{{ 2 * 3.14159 * 58 }}"/>
+        </svg>
+        <div class="score-center">
+          <div class="score-pct" style="color:{{ '#34D399' if pct >= 80 else ('#FBBF24' if pct >= 50 else '#F87171') }}">
+            {{ pct }}%
+          </div>
+          <div class="score-label">{{ score }}/{{ total }}</div>
+        </div>
+      </div>
+
+      {% if pct >= 90 %}
+        <div class="grade-chip grade-a">🏆 Excellent</div>
+        <div style="font-size:.78rem;color:var(--t-secondary);margin-top:.5rem;text-align:center">Claim is NFIP ready</div>
+      {% elif pct >= 75 %}
+        <div class="grade-chip grade-b">✅ Good</div>
+        <div style="font-size:.78rem;color:var(--t-secondary);margin-top:.5rem;text-align:center">Almost complete</div>
+      {% elif pct >= 50 %}
+        <div class="grade-chip grade-c">⚠️ Needs Work</div>
+        <div style="font-size:.78rem;color:var(--t-secondary);margin-top:.5rem;text-align:center">Several items missing</div>
+      {% else %}
+        <div class="grade-chip grade-d">❌ Incomplete</div>
+        <div style="font-size:.78rem;color:var(--t-secondary);margin-top:.5rem;text-align:center">Major gaps — review now</div>
+      {% endif %}
+
+      <div style="margin-top:1.25rem;width:100%">
+        {% set missing = [] %}
+        {% for key, label in checklist %}{% if not checks[key] %}{% set _ = missing.append(label) %}{% endif %}{% endfor %}
+        {% if missing %}
+        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t-secondary);margin-bottom:.5rem">Missing</div>
+        {% for m in missing %}
+        <div style="font-size:.78rem;color:var(--red);margin-bottom:.3rem;display:flex;align-items:center;gap:.4rem">
+          <span style="color:var(--red)">•</span> {{ m }}
+        </div>
+        {% endfor %}
+        {% else %}
+        <div style="text-align:center;font-size:.82rem;color:var(--green);font-weight:600">
+          ✅ All items complete!
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Checklist -->
+  <div class="card" style="margin:0">
+    <div class="card-header">
+      <div class="card-title">📋 NFIP Compliance Checklist</div>
+      <a href="{{ url_for('claim_detail', claim_id=claim.id) }}" class="btn btn-primary btn-sm">✏️ Fill Gaps</a>
+    </div>
+    {% for key, label in checklist %}
+    <div class="checklist-item">
+      <div class="check-icon {{ 'check-ok' if checks[key] else 'check-fail' }}">
+        {{ '✓' if checks[key] else '✗' }}
+      </div>
+      <div class="check-label">{{ label }}</div>
+      <span class="check-req {{ 'check-req-ok' if checks[key] else 'check-req-fail' }}">
+        {{ 'Complete' if checks[key] else 'Missing' }}
+      </span>
+    </div>
+    {% endfor %}
+
+    <div style="padding:1rem;border-top:1px solid var(--border);font-size:.78rem;color:var(--t-muted);line-height:1.6;margin-top:.5rem">
+      <strong style="color:var(--t-secondary)">NFIP Note:</strong>
+      This checklist covers the standard NFIP flood claim documentation requirements per FEMA guidelines.
+      Photos requirement = 3+ uploaded. Flood zone must be looked up via the FEMA button on the claim.
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Animate ring on load
+window.addEventListener('load', function() {
+  const circ = document.getElementById('ring-val');
+  if (!circ) return;
+  const r = 58;
+  const circumference = 2 * Math.PI * r;
+  const pct = {{ pct }};
+  const offset = circumference - (pct / 100) * circumference;
+  requestAnimationFrame(() => {
+    circ.style.strokeDashoffset = offset;
+  });
+});
+</script>
+{% endblock %}

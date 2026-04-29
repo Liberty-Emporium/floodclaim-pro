@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+{% block title %}Notifications — FloodClaim Pro{% endblock %}
+{% block page_title %}🔔 Notifications{% endblock %}
+
+{% block extra_css %}
+<style>
+  .notif-grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 1.5rem;
+    align-items: start;
+  }
+  @media (max-width: 850px) { .notif-grid { grid-template-columns: 1fr; } }
+
+  .notif-row {
+    display: flex; align-items: flex-start; gap: .9rem;
+    padding: .9rem 1rem;
+    border-bottom: 1px solid var(--border);
+    transition: background .15s;
+  }
+  .notif-row:last-child { border-bottom: none; }
+  .notif-row:hover { background: rgba(6,214,199,.025); }
+
+  .notif-icon {
+    width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+  }
+  .ni-status  { background: rgba(52,211,153,.12); }
+  .ni-manual  { background: rgba(59,123,255,.12); }
+  .ni-sched   { background: rgba(251,191,36,.12); }
+
+  .notif-body { flex: 1; min-width: 0; }
+  .notif-claim { font-size: .72rem; font-weight: 800; color: var(--teal); margin-bottom: .15rem; }
+  .notif-msg   { font-size: .85rem; color: var(--t-primary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .notif-meta  { display: flex; gap: .75rem; margin-top: .25rem;
+    font-size: .72rem; color: var(--t-muted); flex-wrap: wrap; }
+
+  .type-badge {
+    padding: .15rem .55rem; border-radius: 999px;
+    font-size: .62rem; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .06em;
+    border: 1px solid;
+  }
+  .t-status_change { background: rgba(52,211,153,.1);  color: var(--green); border-color: rgba(52,211,153,.25); }
+  .t-manual        { background: rgba(59,123,255,.1);  color: var(--blue);  border-color: rgba(59,123,255,.25); }
+  .t-sched         { background: rgba(251,191,36,.1);  color: var(--amber); border-color: rgba(251,191,36,.25); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="notif-grid">
+
+  <!-- LEFT: Log -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">📨 Notification Log</div>
+      <span style="font-size:.78rem;color:var(--t-secondary)">Last 200</span>
+    </div>
+    {% if logs %}
+      {% for n in logs %}
+      <div class="notif-row">
+        <div class="notif-icon ni-{{ n.type }}">
+          {% if n.type == 'status_change' %}🔄
+          {% elif n.type == 'manual' %}💬
+          {% else %}📅{% endif %}
+        </div>
+        <div class="notif-body">
+          <div class="notif-claim">
+            {% if n.claim_number %}
+            <a href="{{ url_for('claim_detail', claim_id=n.claim_id) }}" style="color:var(--teal);text-decoration:none">
+              {{ n.claim_number }} — {{ n.client_name }}
+            </a>
+            {% else %}—{% endif %}
+          </div>
+          <div class="notif-msg" title="{{ n.message }}">{{ n.message }}</div>
+          <div class="notif-meta">
+            <span>📧 {{ n.recipient }}</span>
+            <span>🕐 {{ n.sent_at[:16] }}</span>
+            <span class="type-badge t-{{ n.type }}">{{ n.type.replace('_',' ') }}</span>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div style="text-align:center;padding:3rem;color:var(--t-muted)">
+        <div style="font-size:2.5rem;margin-bottom:.75rem">🔕</div>
+        <div style="font-weight:600;margin-bottom:.4rem">No notifications sent yet</div>
+        <div style="font-size:.82rem">Send a manual update or move a claim to trigger auto-notifications.</div>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- RIGHT: Send manual notification -->
+  <div>
+    <div class="card" style="position:sticky;top:80px">
+      <div class="card-header">
+        <div class="card-title">✉️ Send Manual Update</div>
+      </div>
+      <div style="font-size:.82rem;color:var(--t-secondary);margin-bottom:1rem;line-height:1.6">
+        Send a custom message to a client's email. Requires <strong>SendGrid</strong> configured in Settings.
+      </div>
+      <form method="POST" action="{{ url_for('notifications_send') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+          <label>Claim</label>
+          <select name="claim_id" class="form-control" required>
+            <option value="">— Select a claim —</option>
+            {% for n in logs|groupby('claim_id') %}
+            {% set row = n.list[0] %}
+            {% if row.claim_number %}
+            <option value="{{ n.grouper }}">{{ row.claim_number }} — {{ row.client_name }}</option>
+            {% endif %}
+            {% endfor %}
+          </select>
+          <div style="font-size:.72rem;color:var(--t-muted);margin-top:.3rem">
+            Only claims with prior notifications are listed here. Go to a claim to send its first notification.
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Message</label>
+          <textarea name="message" class="form-control" rows="4" required
+                    placeholder="Your claim has been reviewed and is currently in progress. We'll update you as soon as it moves to the next stage."></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%">📨 Send Notification</button>
+      </form>
+
+      <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border)">
+        <div style="font-size:.75rem;font-weight:700;color:var(--t-secondary);margin-bottom:.6rem;text-transform:uppercase;letter-spacing:.07em">Auto Triggers</div>
+        <div style="font-size:.8rem;color:var(--t-secondary);line-height:1.7">
+          🔄 <strong>Status change</strong> — fires automatically when a claim moves columns in Pipeline view.<br>
+          📅 <strong>Inspection scheduled</strong> — fires when you schedule an inspection.<br>
+          ✉️ <strong>Manual</strong> — send any time from this form.
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
