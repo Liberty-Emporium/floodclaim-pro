@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="csrf" content="{{ csrf_token() }}">
 <title>Damage Report — {{ claim.claim_number }}</title>
 <style>
     html,body{overflow-x:hidden!important;max-width:100%;}
@@ -178,19 +179,36 @@ function getCsrfReport() {
   return m ? m.content : '';
 }
 function femaLookup() {
-  fetch('/claims/{{ claim.id }}/fema-lookup', {method:'POST', credentials:'include', headers:{'X-CSRF-Token':getCsrfReport()}})
+  const btn = event.target;
+  btn.textContent = '⏳ Looking up...';
+  btn.disabled = true;
+  fetch('/claims/{{ claim.id }}/fema-lookup', {method:'POST', credentials:'include', headers:{'X-CSRF-Token':getCsrfReport(),'Content-Type':'application/json'}})
     .then(r=>r.json()).then(d=>{
-      if(d.ok) alert('FEMA Flood Zone: ' + d.flood_zone + '\nMap #: ' + (d.fema_map_number||'N/A') + '\nPage will reload.');
-      else alert('Lookup failed: ' + (d.error||'unknown'));
-      if(d.ok) location.reload();
-    });
+      btn.textContent = '🗺️ FEMA Lookup';
+      btn.disabled = false;
+      if(d.ok) {
+        alert('✅ FEMA Flood Zone: ' + (d.flood_zone||'N/A') + '\nMap Panel #: ' + (d.fema_map_number||'N/A'));
+        location.reload();
+      } else {
+        alert('Lookup failed: ' + (d.error||'unknown error'));
+      }
+    }).catch(e=>{ btn.textContent='🗺️ FEMA Lookup'; btn.disabled=false; alert('Network error: '+e); });
 }
 function genPortal() {
-  fetch('/claims/{{ claim.id }}/portal/generate', {method:'POST', credentials:'include', headers:{'X-CSRF-Token':getCsrfReport()}})
+  const btn = event.target;
+  btn.textContent = '⏳ Generating...';
+  btn.disabled = true;
+  fetch('/claims/{{ claim.id }}/portal/generate', {method:'POST', credentials:'include', headers:{'X-CSRF-Token':getCsrfReport(),'Content-Type':'application/json'}})
     .then(r=>r.json()).then(d=>{
-      if(d.ok) { prompt('Client portal link (copy and share):', d.portal_url); }
-      else alert('Error: ' + (d.error||'unknown'));
-    });
+      btn.textContent = '🔗 Client Portal';
+      btn.disabled = false;
+      if(d.ok) {
+        const link = d.portal_url || d.url || '';
+        prompt('✅ Client portal link — copy and share with your client:', link);
+      } else {
+        alert('Error: ' + (d.error||'unknown error'));
+      }
+    }).catch(e=>{ btn.textContent='🔗 Client Portal'; btn.disabled=false; alert('Network error: '+e); });
 }
 </script>
 {% endif %}
