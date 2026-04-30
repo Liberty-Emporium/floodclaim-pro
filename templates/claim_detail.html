@@ -482,6 +482,11 @@
         <input class="form-control" type="text" name="fema_map_number" value="{{ claim.fema_map_number or '' }}" placeholder="e.g. 12345C0123J">
       </div>
 
+      <div>
+        <label style="font-size:.8rem;color:#94a3b8;display:block;margin-bottom:.3rem">Inspection Date</label>
+        <input class="form-control" type="date" name="inspection_date" value="{{ claim.inspection_date or claim.sched_date or '' }}">
+      </div>
+
     </div>
     <button type="submit" style="margin-top:1.25rem;padding:.6rem 1.5rem;background:#f59e0b;color:#000;border:none;border-radius:.5rem;font-size:.9rem;cursor:pointer;font-weight:700">✅ Save NFIP Fields</button>
   </form>

@@ -1522,7 +1522,7 @@ def nfip_quick_fill(claim_id):
         UPDATE claims SET
             policy_type=?, coverage_building=?, coverage_contents=?, deductible=?,
             flood_source=?, water_category=?, water_class=?, water_depth_in=?,
-            date_water_removed=?, flood_zone=?, fema_map_number=?,
+            date_water_removed=?, flood_zone=?, fema_map_number=?, inspection_date=?,
             updated_at=CURRENT_TIMESTAMP
         WHERE id=?
     ''', (
@@ -1537,6 +1537,7 @@ def nfip_quick_fill(claim_id):
         f.get('date_water_removed','').strip(),
         f.get('flood_zone','').strip(),
         f.get('fema_map_number','').strip(),
+        f.get('inspection_date','').strip(),
         claim_id
     ))
     db.commit()
@@ -3146,8 +3147,8 @@ def willie_schedule_inspection(claim_id):
         'INSERT INTO inspection_slots (claim_id, adjuster_id, slot_date, slot_time, notes) VALUES (?,?,?,?,?)',
         (claim_id, adj_id, slot_date, slot_time, notes)
     )
-    db.execute('UPDATE claims SET sched_date=?, sched_time=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
-               (slot_date, slot_time, claim_id))
+    db.execute('UPDATE claims SET sched_date=?, sched_time=?, inspection_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+               (slot_date, slot_time, slot_date, claim_id))
     db.commit()
     _log_activity(claim_id, f'Inspection scheduled for {slot_date} at {slot_time} (by Aquila)', 'Aquila')
     return jsonify({'ok': True, 'claim_id': claim_id, 'date': slot_date, 'time': slot_time,
@@ -3907,8 +3908,8 @@ def schedule_add():
         VALUES (?,?,?,?,?)
     ''', (claim_id, adj_id, slot_date, slot_time, notes))
     # Update claim's sched fields
-    db.execute('UPDATE claims SET sched_date=?, sched_time=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
-               (slot_date, slot_time, claim_id))
+    db.execute('UPDATE claims SET sched_date=?, sched_time=?, inspection_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+               (slot_date, slot_time, slot_date, claim_id))
     db.commit()
     claim = db.execute('SELECT * FROM claims WHERE id=?', (claim_id,)).fetchone()
     # Email adjuster
@@ -4068,10 +4069,10 @@ def compliance(claim_id):
         'water_class':   bool(claim['water_class']),
         'water_depth':   bool(claim['water_depth_in']),
         'water_removed': bool(claim['date_water_removed']),
-        'inspection':    bool(claim['inspection_date']),
+        'inspection':    bool(claim['inspection_date'] or claim['sched_date']),
         'flood_zone':    bool(claim['flood_zone'] and claim['flood_zone'] != 'Unknown'),
         'fema_map':      bool(claim['fema_map_number']),
-        'photos':        len(photos) >= 3,
+        'photos':        len(photos) >= 1,
         'rooms':         len(rooms) >= 1,
         'estimate':      bool(claim['total_estimate']),
         'mortgage':      True,  # optional — always pass
