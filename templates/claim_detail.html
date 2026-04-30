@@ -399,6 +399,94 @@
   {% endif %}
 </div>
 
+<!-- ── NFIP Quick-Fill ───────────────────────────────────────────── -->
+<div class="card" style="border:1px solid rgba(251,191,36,.3);background:rgba(251,191,36,0.04)">
+  <div class="card-title" style="margin-bottom:1rem">✅ NFIP Quick-Fill <span style="font-size:.8rem;font-weight:400;color:#94a3b8">— fill these to pass compliance</span></div>
+  <form method="POST" action="/claims/{{ claim.id }}/nfip-fill">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem">
+
+      <div>
+        <label style="font-size:.8rem;color:#94a3b8;display:block;margin-bottom:.3rem">Policy Type</label>
+        <select name="policy_type" class="form-control">
+          <option value="">-- Select --</option>
+          <option value="Building" {% if claim.policy_type=='Building' %}selected{% endif %}>Building</option>
+          <option value="Contents" {% if claim.policy_type=='Contents' %}selected{% endif %}>Contents</option>
+          <option value="Both" {% if claim.policy_type=='Both' %}selected{% endif %}>Both</option>
+        </select>
+      </div>
+
+      <div>
+        <label style="font-size:.8rem;color:#94a3b8;display:block;margin-bottom:.3rem">Building Coverage ($)</label>
+        <input class="form-control" type="number" name="coverage_building" value="{{ claim.coverage_building or '' }}" placeholder="e.g. 250000">
+      </div>
+
+      <div>
+        <label style="font-size:.8rem;color:#94a3b8;display:block;margin-bottom:.3rem">Contents Coverage ($)</label>
+        <input class="form-control" type="number" name="coverage_contents" value="{{ claim.coverage_contents or '' }}" placeholder="e.g. 100000">
+      </div>
+
+      <div>
+        <label style="font-size:.8rem;color:#94a3b8;display:block;margin-bottom:.3rem">Deductible ($)</label>
+        <input class="form-control" type="number" name="deductible" value="{{ claim.deductible or '' }}" placeholder="e.g. 1000">
+      </div>
+
+      <div>
+        <label style="font-size:.8rem;color:#94a3b8;display:block;margin-bottom:.3rem">Flood Source</label>
+        <select name="flood_source" class="form-control">
+          <option value="">-- Select --</option>
+          {% for src in ['River overflow','Storm surge','Heavy rain','Sewer backup','Flash flood','Groundwater','Other'] %}
+          <option value="{{ src }}" {% if claim.flood_source==src %}selected{% endif %}>{{ src }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label style="font-size:.8rem;color:#94a3b8;display:block;margin-bottom:.3rem">Water Category</label>
+        <select name="water_category" class="form-control">
+          <option value="">-- Select --</option>
+          <option value="Cat 1" {% if claim.water_category=='Cat 1' %}selected{% endif %}>Cat 1 — Clean</option>
+          <option value="Cat 2" {% if claim.water_category=='Cat 2' %}selected{% endif %}>Cat 2 — Gray</option>
+          <option value="Cat 3" {% if claim.water_category=='Cat 3' %}selected{% endif %}>Cat 3 — Black</option>
+        </select>
+      </div>
+
+      <div>
+        <label style="font-size:.8rem;color:#94a3b8;display:block;margin-bottom:.3rem">Water Class</label>
+        <select name="water_class" class="form-control">
+          <option value="">-- Select --</option>
+          <option value="Class 1" {% if claim.water_class=='Class 1' %}selected{% endif %}>Class 1</option>
+          <option value="Class 2" {% if claim.water_class=='Class 2' %}selected{% endif %}>Class 2</option>
+          <option value="Class 3" {% if claim.water_class=='Class 3' %}selected{% endif %}>Class 3</option>
+          <option value="Class 4" {% if claim.water_class=='Class 4' %}selected{% endif %}>Class 4</option>
+        </select>
+      </div>
+
+      <div>
+        <label style="font-size:.8rem;color:#94a3b8;display:block;margin-bottom:.3rem">Water Depth (inches)</label>
+        <input class="form-control" type="number" name="water_depth_in" value="{{ claim.water_depth_in or '' }}" placeholder="e.g. 12">
+      </div>
+
+      <div>
+        <label style="font-size:.8rem;color:#94a3b8;display:block;margin-bottom:.3rem">Date Water Removed</label>
+        <input class="form-control" type="date" name="date_water_removed" value="{{ claim.date_water_removed or '' }}">
+      </div>
+
+      <div>
+        <label style="font-size:.8rem;color:#94a3b8;display:block;margin-bottom:.3rem">FEMA Flood Zone</label>
+        <input class="form-control" type="text" name="flood_zone" value="{{ claim.flood_zone or '' }}" placeholder="e.g. AE">
+      </div>
+
+      <div>
+        <label style="font-size:.8rem;color:#94a3b8;display:block;margin-bottom:.3rem">FEMA Map Panel #</label>
+        <input class="form-control" type="text" name="fema_map_number" value="{{ claim.fema_map_number or '' }}" placeholder="e.g. 12345C0123J">
+      </div>
+
+    </div>
+    <button type="submit" style="margin-top:1.25rem;padding:.6rem 1.5rem;background:#f59e0b;color:#000;border:none;border-radius:.5rem;font-size:.9rem;cursor:pointer;font-weight:700">✅ Save NFIP Fields</button>
+  </form>
+</div>
+
 <div class="card">
   <div class="card-title" style="margin-bottom:.75rem">📝 Notes</div>
   <form method="POST" action="/claims/{{ claim.id }}/notes">

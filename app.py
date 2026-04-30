@@ -1507,6 +1507,43 @@ def delete_claim(claim_id):
     return redirect(url_for('dashboard'))
 
 
+@app.route('/claims/<int:claim_id>/nfip-fill', methods=['POST'])
+@login_required
+@csrf_required
+def nfip_quick_fill(claim_id):
+    """Quick-fill all NFIP compliance fields in one shot."""
+    db = get_db()
+    claim = db.execute('SELECT id FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim:
+        flash('Claim not found.', 'error')
+        return redirect(url_for('dashboard'))
+    f = request.form
+    db.execute('''
+        UPDATE claims SET
+            policy_type=?, coverage_building=?, coverage_contents=?, deductible=?,
+            flood_source=?, water_category=?, water_class=?, water_depth_in=?,
+            date_water_removed=?, flood_zone=?, fema_map_number=?,
+            updated_at=CURRENT_TIMESTAMP
+        WHERE id=?
+    ''', (
+        f.get('policy_type','').strip(),
+        float(f.get('coverage_building') or 0),
+        float(f.get('coverage_contents') or 0),
+        float(f.get('deductible') or 0),
+        f.get('flood_source','').strip(),
+        f.get('water_category','').strip(),
+        f.get('water_class','').strip(),
+        f.get('water_depth_in','').strip(),
+        f.get('date_water_removed','').strip(),
+        f.get('flood_zone','').strip(),
+        f.get('fema_map_number','').strip(),
+        claim_id
+    ))
+    db.commit()
+    flash('NFIP fields saved — recheck your compliance score!', 'success')
+    return redirect(url_for('claim_detail', claim_id=claim_id))
+
+
 @app.route('/claims/<int:claim_id>/notes', methods=['POST'])
 @login_required
 @csrf_required
