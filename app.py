@@ -1013,8 +1013,12 @@ def report_pdf(claim_id):
     recalc_claim(claim_id)
     claim = db.execute('''SELECT c.*, u.name as adjuster_name, u.email as adjuster_email
         FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''', (claim_id,)).fetchone()
+    signature = db.execute(
+        'SELECT * FROM signatures WHERE claim_id=? ORDER BY id DESC LIMIT 1',
+        (claim_id,)).fetchone()
     return render_template('report.html', claim=claim, room_data=room_data,
                            unassigned_photos=unassigned_photos, pdf_mode=True, auto_print=True,
+                           signature=signature,
                            generated=datetime.datetime.now().strftime('%B %d, %Y %I:%M %p'))
 
 
@@ -1804,8 +1808,11 @@ def report(claim_id):
     claim = db.execute('''SELECT c.*, u.name as adjuster_name, u.email as adjuster_email
         FROM claims c LEFT JOIN users u ON c.adjuster_id=u.id WHERE c.id=?''',
         (claim_id,)).fetchone()
+    signature = db.execute(
+        'SELECT * FROM signatures WHERE claim_id=? ORDER BY id DESC LIMIT 1',
+        (claim_id,)).fetchone()
     return render_template('report.html', claim=claim, room_data=room_data,
-                           unassigned_photos=unassigned_photos,
+                           unassigned_photos=unassigned_photos, signature=signature,
                            generated=datetime.datetime.now().strftime('%B %d, %Y %I:%M %p'))
 
 # ── Admin: Settings ───────────────────────────────────────────────────────────
