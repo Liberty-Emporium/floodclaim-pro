@@ -1594,8 +1594,12 @@ def claim_detail(claim_id):
         if not claim:
             flash('Claim not found.', 'error')
             return redirect(url_for('dashboard'))
+        signature = db.execute(
+            'SELECT * FROM signatures WHERE claim_id=? ORDER BY id DESC LIMIT 1',
+            (claim_id,)).fetchone()
         return render_template('claim_detail.html', claim=claim,
-                               room_data=room_data, unassigned_photos=unassigned_photos)
+                               room_data=room_data, unassigned_photos=unassigned_photos,
+                               signature=signature)
     except Exception as _claim_err:
         import traceback as _tb
         print(f'[claim_detail ERROR] claim_id={claim_id}: {_claim_err}\n{_tb.format_exc()}')

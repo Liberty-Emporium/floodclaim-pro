@@ -399,6 +399,28 @@
   {% endif %}
 </div>
 
+<!-- ── Client Signature ─────────────────────────────────────── -->
+{% if signature %}
+<div class="card" style="border:1px solid rgba(16,185,129,.3);background:rgba(16,185,129,0.04)">
+  <div class="card-title" style="margin-bottom:.75rem">✅ Client Signature</div>
+  <div style="font-size:.85rem;color:#64748b;margin-bottom:.75rem">
+    Signed by <strong style="color:#1e293b">{{ signature.signer }}</strong>
+    on <strong style="color:#1e293b">{{ signature.signed_at }}</strong>
+  </div>
+  <img src="{{ signature.sig_data }}" alt="Client Signature"
+       style="border:1px solid #e2e8f0;border-radius:.5rem;max-width:400px;width:100%;background:#fff;padding:.5rem">
+  <div style="margin-top:.75rem">
+    <a href="{{ signature.sig_data }}" download="signature-{{ claim.claim_number }}.png"
+       style="font-size:.8rem;color:#3b82f6;font-weight:600">⬇ Download Signature</a>
+  </div>
+</div>
+{% else %}
+<div class="card" style="border:1px solid rgba(148,163,184,.2)">
+  <div class="card-title" style="margin-bottom:.5rem">✏️ Client Signature</div>
+  <div style="font-size:.85rem;color:#94a3b8">No signature yet. Share the <a href="/claims/{{ claim.id }}/portal/view" style="color:#3b82f6" target="_blank">Client Portal</a> link for the client to sign.</div>
+</div>
+{% endif %}
+
 <!-- ── NFIP Quick-Fill ───────────────────────────────────────────── -->
 <div class="card" style="border:1px solid rgba(251,191,36,.3);background:rgba(251,191,36,0.04)">
   <div class="card-title" style="margin-bottom:1rem">✅ NFIP Quick-Fill <span style="font-size:.8rem;font-weight:400;color:#94a3b8">— fill these to pass compliance</span></div>
