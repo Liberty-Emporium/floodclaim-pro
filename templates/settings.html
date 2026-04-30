@@ -206,8 +206,9 @@
                placeholder="Paste Aquila's API key from the widget admin..."
                autocomplete="new-password"
                value="{{ willie_key[:8] + '...' if willie_key else '' }}"/>
-        <div style="font-size:.78rem;color:var(--gray-400);margin-top:.35rem;">
+        <div style="font-size:.78rem;color:var(--gray-400);margin-top:.35rem;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
           Find it: AI Agent Widget app → Aquila → Edit → copy the API Key field.
+          <a href="https://ai-agent-widget-production.up.railway.app/dashboard" target="_blank" class="btn btn-sm" style="background:rgba(99,102,241,0.15);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);padding:4px 12px;font-size:.78rem;">🤖 Open AI Agent Widget →</a>
         </div>
       </div>
       <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;">
