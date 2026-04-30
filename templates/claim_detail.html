@@ -164,7 +164,7 @@
     <a href="{{ url_for('submit_package_page', claim_id=claim.id) }}" class="btn btn-primary btn-sm">📤 Submit to Carrier</a>
     <a href="{{ url_for('report', claim_id=claim.id) }}" class="btn btn-cyan btn-sm" target="_blank">📄 Report</a>
     <a href="{{ url_for('compliance', claim_id=claim.id) }}" class="btn btn-amber btn-sm">✅ NFIP Check</a>
-    <button class="btn btn-success btn-sm" onclick="runAIEstimate()">🤖 AI Estimate</button>
+
     <a href="{{ url_for('claim_qr', claim_id=claim.id) }}" class="btn btn-ghost btn-sm">📱 QR Upload</a>
     <a href="{{ url_for('claim_activity', claim_id=claim.id) }}" class="btn btn-ghost btn-sm">📜 Activity</a>
     <form method="POST" action="{{ url_for('duplicate_claim', claim_id=claim.id) }}" style="display:inline">
