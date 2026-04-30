@@ -108,6 +108,11 @@ def _csrf_protect():
     if request.method in ('POST', 'PUT', 'DELETE', 'PATCH'):
         if request.path.startswith('/api/'):
             return  # API routes use token auth, skip CSRF
+        if request.path.startswith('/portal/'):
+            return  # Public client portal — no session/CSRF
+        import re
+        if re.search(r'/claims/\d+/sign$', request.path):
+            return  # Public signature endpoint — no session
         if not _validate_csrf():
             from flask import abort
             abort(403)
