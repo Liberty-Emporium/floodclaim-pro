@@ -1507,6 +1507,22 @@ def delete_claim(claim_id):
     return redirect(url_for('dashboard'))
 
 
+@app.route('/claims/<int:claim_id>/notes', methods=['POST'])
+@login_required
+@csrf_required
+def update_claim_notes(claim_id):
+    """Update the notes field on a claim."""
+    db = get_db()
+    claim = db.execute('SELECT id FROM claims WHERE id=?', (claim_id,)).fetchone()
+    if not claim:
+        return jsonify({'ok': False, 'error': 'Claim not found'}), 404
+    notes = request.form.get('notes', '').strip()
+    db.execute('UPDATE claims SET notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', (notes, claim_id))
+    db.commit()
+    flash('Notes saved.', 'success')
+    return redirect(url_for('claim_detail', claim_id=claim_id))
+
+
 @app.route('/claims/<int:claim_id>')
 @login_required
 def claim_detail(claim_id):
