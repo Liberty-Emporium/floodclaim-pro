@@ -101,6 +101,25 @@ def _validate_csrf():
 # Expose to all Jinja2 templates as {{ csrf_token() }}
 app.jinja_env.globals['csrf_token'] = _get_csrf_token
 
+# ── Bot / scanner sink ──────────────────────────────────────────────────────
+# Returns 410 Gone for paths that scanners probe but will never exist here.
+_BOT_PATHS = [
+    '/wp-admin/', '/wp-login.php', '/wp-cron.php', '/wp-includes/',
+    '/wp-content/', '/xmlrpc.php', '/wp-admin/install.php',
+    '/wp-json/', '/.env', '/.git/', '/config.php', '/setup.php',
+    '/install.php', '/phpmyadmin/', '/pma/', '/admin/config.php',
+    '/sitemap.xml', '/sitemap_index.xml', '/robots.txt.bak',
+    '/.htaccess', '/web.config', '/backup/', '/administrator/',
+    '/joomla/', '/drupal/', '/typo3/',
+]
+
+@app.before_request
+def _block_bot_paths():
+    path = request.path
+    if any(path == p or path.startswith(p) for p in _BOT_PATHS):
+        return '', 410
+# ────────────────────────────────────────────────────────────────────────────
+
 
 @app.before_request
 def _csrf_protect():
