@@ -1177,10 +1177,13 @@ def get_signature(claim_id):
 # ── Stripe Subscriptions ──────────────────────────────────────────────────────
 STRIPE_PLANS = [
     {'id': 'basic',  'name': 'Basic',  'price': '$49/mo',  'price_cents': 4900,
+     'stripe_price_id': 'price_1TS3NiE50C70iVkQpmBiiQr0',
      'features': ['25 claims/mo', 'PDF export', 'Aquila AI', 'Client portal', 'NFIP Compliance']},
     {'id': 'pro',    'name': 'Pro',    'price': '$99/mo',  'price_cents': 9900,
+     'stripe_price_id': 'price_1TS3NiE50C70iVkQGZYJRdNq',
      'features': ['100 claims/mo', 'Everything in Basic', 'Xactimate export', 'Analytics', 'Priority support']},
     {'id': 'agency', 'name': 'Agency', 'price': '$249/mo', 'price_cents': 24900,
+     'stripe_price_id': 'price_1TS3NiE50C70iVkQD6vVFdsV',
      'features': ['Unlimited claims', 'Everything in Pro', 'Multi-adjuster team', 'White-label reports', 'SMS alerts']},
 ]
 
