@@ -29,6 +29,19 @@ except Exception:
 
 app = Flask(__name__)
 
+# ── EcDash network client (Phase 2 + 3) ───────────────────────────────────
+try:
+    from ecdash_client import init_app as _ecdash_init, call_app as _call_app
+    _ecdash_init(app, 'FloodClaim Pro')
+except ImportError:
+    _ecdash_init = None
+    def _call_app(*a, **kw): return None
+
+APP_NAME    = 'FloodClaim Pro'
+APP_VERSION = '1.0'
+import time as _uptime_time
+_APP_START_TIME = _uptime_time.time()
+
 def _get_secret_key():
     env_key = os.environ.get('SECRET_KEY')
     if env_key:
@@ -4663,6 +4676,59 @@ def sales_page():
 @app.route('/health')
 def health():
     return jsonify({'status': 'ok'})
+
+# ── Phase 3: Standardized /api/status ───────────────────────────────────
+@app.route('/api/status', methods=['GET'])
+def api_status():
+    """Liberty-Emporium network: standardized status endpoint."""
+    from datetime import datetime, timezone
+    uptime = int(_uptime_time.time() - _APP_START_TIME)
+    def _fmt(s):
+        if s < 60:   return f"{s}s"
+        if s < 3600: return f"{s//60}m {s%60}s"
+        return f"{s//3600}h {(s%3600)//60}m"
+    try:
+        db     = get_db()
+        claims = db.execute('SELECT COUNT(*) FROM claims').fetchone()[0]
+        open_c = db.execute("SELECT COUNT(*) FROM claims WHERE status NOT IN ('closed','paid')").fetchone()[0]
+        photos = db.execute('SELECT COUNT(*) FROM photos').fetchone()[0]
+        stats  = {'total_claims': claims, 'open_claims': open_c, 'total_photos': photos}
+    except Exception as e:
+        stats = {'error': str(e)}
+    return jsonify({
+        'app':            APP_NAME,
+        'version':        APP_VERSION,
+        'healthy':        True,
+        'uptime_seconds': uptime,
+        'uptime_human':   _fmt(uptime),
+        'stats':          stats,
+        'network':        'liberty-emporium',
+        'ts':             datetime.now(timezone.utc).isoformat(),
+    })
+
+# ── Phase 3: Cross-app — Pet Vet AI photo analysis ──────────────────────────
+def ai_describe_photo_via_network(image_path):
+    """Phase 3: Ask Pet Vet AI to analyze a damage photo via the app network.
+    Falls back to local OpenRouter analysis if network call fails.
+    """
+    try:
+        with open(image_path, 'rb') as f:
+            img_b64 = base64.b64encode(f.read()).decode()
+        ext  = image_path.rsplit('.', 1)[-1].lower()
+        mime = f'image/{ext}' if ext != 'jpg' else 'image/jpeg'
+
+        result = _call_app('Pet Vet AI', '/api/analyze-damage',
+                           data={'image_b64': img_b64, 'mime_type': mime,
+                                 'context': 'flood damage'})
+        if result and result.get('success'):
+            analysis = result.get('analysis', {})
+            if isinstance(analysis, dict):
+                return analysis.get('description') or analysis.get('diagnosis', '')
+            return str(analysis)
+    except Exception:
+        pass
+    # Fallback to local
+    return ai_describe_photo(image_path)
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)
