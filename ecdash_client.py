@@ -36,10 +36,11 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger("ecdash_client")
 
 # ── Config ────────────────────────────────────────────────────────────────────
-ECDASH_URL       = os.environ.get("ECDASH_URL",        "https://jay-portfolio-production.up.railway.app")
-ECDASH_APP_TOKEN = os.environ.get("ECDASH_APP_TOKEN",  "")
-ECDASH_APP_NAME  = os.environ.get("ECDASH_APP_NAME",   "")
+ECDASH_URL        = os.environ.get("ECDASH_URL",        "https://jay-portfolio-production.up.railway.app")
+ECDASH_APP_TOKEN  = os.environ.get("ECDASH_APP_TOKEN",  "")
+ECDASH_APP_NAME   = os.environ.get("ECDASH_APP_NAME",   "")
 _REQUEST_TIMEOUT = int(os.environ.get("ECDASH_TIMEOUT", "8"))
+_SKIP_VAULT       = os.environ.get("SKIP_VAULT",        "").lower() in ("1", "true", "yes")
 
 # In-memory secret cache — avoids repeated vault calls during a request
 _secret_cache: Dict[str, Any]   = {}
@@ -87,6 +88,10 @@ def get_secret(label: str, fallback: str = "") -> str:
     if label in _secret_cache and now - _secret_cache_ts.get(label, 0) < _SECRET_TTL:
         return _secret_cache[label]
 
+    if _SKIP_VAULT:
+        env_key = label.upper().replace(" ", "_").replace("-", "_")
+        return os.environ.get(env_key, fallback)
+
     if not ECDASH_APP_TOKEN or not ECDASH_APP_NAME:
         # Fall back to env var: "Stripe Secret Key" → STRIPE_SECRET_KEY
         env_key = label.upper().replace(" ", "_").replace("-", "_")
@@ -116,6 +121,9 @@ def get_secrets(labels: List[str]) -> Dict[str, str]:
         keys = get_secrets(["Stripe Secret Key", "Stripe Publishable Key"])
         stripe.api_key = keys["Stripe Secret Key"]
     """
+    if _SKIP_VAULT:
+        return {l: os.environ.get(l.upper().replace(" ", "_").replace("-", "_"), "") for l in labels}
+
     if not labels:
         return {}
 
@@ -158,7 +166,7 @@ def _refresh_app_urls() -> Dict[str, str]:
     if _url_cache and now - _url_cache_ts < _URL_TTL:
         return _url_cache
 
-    if not ECDASH_APP_TOKEN:
+    if _SKIP_VAULT or not ECDASH_APP_TOKEN:
         return _url_cache
 
     result = _http("GET", f"{ECDASH_URL}/api/vault",
